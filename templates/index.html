@@ -446,21 +446,30 @@ function updateStatus(el, status) {
 }
 
 async function fetchStatus() {
+  // ── 1. Nettverksforespørsel — feil her = offline ───────────────────────────
+  let d;
   try {
     const r = await fetch('/api/status');
-    const d = await r.json();
+    d = await r.json();
+  } catch(e) {
+    setOffline('Nettverksfeil: ' + e.message);
+    return;
+  }
 
-    if (!d.connected) {
-      setOffline('Enheten offline — sjekker igjen om 12s');
-      return;
-    }
-    if (!d.device_online) {
-      document.getElementById('conn-dot').className    = 'dot online';
-      document.getElementById('conn-label').textContent = 'Tilkoblet (venter på data...)';
-    } else {
-      setOnline(d.mqtt_connected);
-    }
+  // ── 2. Tilkoblingsstatus — oppdater dot uavhengig av rendering ────────────
+  if (!d.connected) {
+    setOffline('Enheten offline — sjekker igjen om 12s');
+    return;
+  }
+  if (!d.device_online) {
+    document.getElementById('conn-dot').className    = 'dot online';
+    document.getElementById('conn-label').textContent = 'Tilkoblet (venter på data...)';
+  } else {
+    setOnline(d.mqtt_connected);
+  }
 
+  // ── 3. Rendering — feil her vises i ts-bar, påvirker IKKE dot ─────────────
+  try {
     const probes = d.probes || [];
     const byIdx = {};
     probes.forEach(p => byIdx[p.index] = p);
@@ -475,32 +484,27 @@ async function fetchStatus() {
     document.getElementById('food2-temp').innerHTML = tempHTML(food2.c);
     document.getElementById('food3-temp').innerHTML = tempHTML(food3.c);
 
-    // Pit måltemperatur
     const userPitTarget = d.user_set_temp_c || d.set_temp_c;
     if (userPitTarget != null) {
       document.getElementById('pit-target-val').textContent = userPitTarget;
       document.getElementById('pit-target-display').style.display = 'flex';
       pitTargetC = userPitTarget;
     }
-    // Vis ramp-nedskrudd mål hvis aktiv
     if (d.ctrl && d.ctrl.ramping && d.ctrl.ramp_active_set_c != null) {
       document.getElementById('pit-target-val').textContent =
         `${d.ctrl.ramp_active_set_c} (↓${userPitTarget})`;
     }
 
-    // Mat-alarm temperaturer
     const fa = d.food_alarm_c || {};
     [1, 2, 3].forEach(i => {
       const val = fa[String(i)];
-      const disp = document.getElementById('food' + i + '-target-display');
       if (val != null) {
         document.getElementById('food' + i + '-target-val').textContent = val;
-        disp.style.display = 'flex';
+        document.getElementById('food' + i + '-target-display').style.display = 'flex';
         foodTargets[i] = val;
       }
     });
 
-    // ── Bannere ───────────────────────────────────────────────────────────────
     const c = d.ctrl || {};
     const banners = [];
     if (c.open_lid)
@@ -509,35 +513,30 @@ async function fetchStatus() {
       banners.push(`<div class="banner banner-done">✅ Mat ${c.food_override_probe} ferdig — pit senket til 60°C</div>`);
     if (c.ramping && !c.food_override)
       banners.push(`<div class="banner banner-ramp">📉 Ramp aktiv — pit-mål senkes (${Math.round(c.ramp_factor*100)}%)</div>`);
-    // Timer-alarmer
     const timers2 = d.cook_timers || {};
     [1,2,3].forEach(i => {
       const t = timers2[String(i)];
-      if (t && t.fired) {
-        const action = (d.settings || {}).timeout_action || 'Hold';
-        banners.push(`<div class="banner banner-done">⏰ Koketimer Mat ${i} ferdig — ${action}</div>`);
-      }
+      if (t && t.fired)
+        banners.push(`<div class="banner banner-done">⏰ Koketimer Mat ${i} ferdig — ${(d.settings||{}).timeout_action||'Hold'}</div>`);
     });
     document.getElementById('banners').innerHTML = banners.join('');
 
-    // Probe names
     if (document.activeElement.id !== 'food1-name') document.getElementById('food1-name').value = food1.name || '';
     if (document.activeElement.id !== 'food2-name') document.getElementById('food2-name').value = food2.name || '';
     if (document.activeElement.id !== 'food3-name') document.getElementById('food3-name').value = food3.name || '';
 
-    // Status fra server (beregnet av compute_probe_status)
     updateStatus(document.getElementById('pit-status'),   pit.status   || 'ERROR');
     updateStatus(document.getElementById('food1-status'), food1.status || (food1.c != null ? 'OK' : '--'));
     updateStatus(document.getElementById('food2-status'), food2.status || (food2.c != null ? 'OK' : '--'));
     updateStatus(document.getElementById('food3-status'), food3.status || (food3.c != null ? 'OK' : '--'));
 
-    // Cook timers — nedtelling
     const timers = d.cook_timers || {};
     [1, 2, 3].forEach(i => {
       const t = timers[String(i)];
       if (!t) return;
       const el    = document.getElementById(`food${i}-timer`);
       const start = document.getElementById(`food${i}-timer-start`);
+      if (!el || !start) return;
       if (t.duration_s <= 0) {
         el.textContent = '--:--';
         el.className   = 'timer-countdown empty';
@@ -557,7 +556,8 @@ async function fetchStatus() {
     document.getElementById('ts-bar').textContent = 'Sist oppdatert: ' + d.ts;
     loadSettingsUI(d.settings);
   } catch(e) {
-    setOffline(e.message);
+    console.error('Render feil:', e);
+    document.getElementById('ts-bar').textContent = 'Render feil: ' + e.message;
   }
 }
 
