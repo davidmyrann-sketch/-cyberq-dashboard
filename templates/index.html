@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CyberQ Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js" async></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #111; color: #eee; font-family: 'Helvetica Neue', Arial, sans-serif; min-height: 100vh; }
@@ -394,38 +394,7 @@
 </div>
 
 <script>
-// Chart er valgfritt — om CDN ikke laster, fungerer resten av appen uansett
-let chart = null;
-try {
-  const ctx = document.getElementById('tempChart').getContext('2d');
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [
-        { label: 'Pit',   data: [], borderColor: '#e8620a', tension: 0.3, fill: false, pointRadius: 0, borderWidth: 2 },
-        { label: 'Mat 1', data: [], borderColor: '#3498db', tension: 0.3, fill: false, pointRadius: 0, borderWidth: 2 },
-        { label: 'Mat 2', data: [], borderColor: '#2ecc71', tension: 0.3, fill: false, pointRadius: 0, borderWidth: 2 },
-        { label: 'Mat 3', data: [], borderColor: '#9b59b6', tension: 0.3, fill: false, pointRadius: 0, borderWidth: 2 },
-        { label: 'Pit mål',   data: [], borderColor: '#e8620a', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
-        { label: 'Mat 1 mål', data: [], borderColor: '#3498db', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
-        { label: 'Mat 2 mål', data: [], borderColor: '#2ecc71', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
-        { label: 'Mat 3 mål', data: [], borderColor: '#9b59b6', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
-      ]
-    },
-    options: {
-      responsive: true,
-      animation: false,
-      scales: {
-        x: { ticks: { color: '#666', maxTicksLimit: 10 }, grid: { color: '#222' } },
-        y: { ticks: { color: '#666' }, grid: { color: '#222' }, title: { display: true, text: '°C', color: '#666' } }
-      },
-      plugins: { legend: { labels: { color: '#aaa', filter: i => !i.text.includes('mål') || chart.data.datasets[i.datasetIndex].data.some(v => v != null) } } }
-    }
-  });
-} catch(e) {
-  console.warn('Chart.js ikke tilgjengelig:', e.message);
-}
+let chart = null; // initialiseres lazy i initChart() når Chart.js CDN er lastet
 
 // Globale målverdier for graflinjer
 let pitTargetC    = null;
@@ -565,7 +534,35 @@ async function fetchStatus() {
   }
 }
 
+function initChart() {
+  if (chart || typeof Chart === 'undefined') return;
+  try {
+    const ctx = document.getElementById('tempChart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [
+        { label:'Pit',      data:[], borderColor:'#e8620a', tension:0.3, fill:false, pointRadius:0, borderWidth:2 },
+        { label:'Mat 1',    data:[], borderColor:'#3498db', tension:0.3, fill:false, pointRadius:0, borderWidth:2 },
+        { label:'Mat 2',    data:[], borderColor:'#2ecc71', tension:0.3, fill:false, pointRadius:0, borderWidth:2 },
+        { label:'Mat 3',    data:[], borderColor:'#9b59b6', tension:0.3, fill:false, pointRadius:0, borderWidth:2 },
+        { label:'Pit mål',  data:[], borderColor:'#e8620a', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
+        { label:'Mat 1 mål',data:[], borderColor:'#3498db', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
+        { label:'Mat 2 mål',data:[], borderColor:'#2ecc71', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
+        { label:'Mat 3 mål',data:[], borderColor:'#9b59b6', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
+      ]},
+      options: { responsive:true, animation:false,
+        scales: {
+          x: { ticks:{color:'#666',maxTicksLimit:10}, grid:{color:'#222'} },
+          y: { ticks:{color:'#666'}, grid:{color:'#222'}, title:{display:true,text:'°C',color:'#666'} }
+        },
+        plugins: { legend:{ labels:{ color:'#aaa', filter: i => !i.text.includes('mål') || chart.data.datasets[i.datasetIndex].data.some(v=>v!=null) }}}
+      }
+    });
+  } catch(e) { console.warn('Chart init feil:', e.message); }
+}
+
 async function fetchHistory() {
+  initChart();
   if (!chart) return;
   try {
     const r = await fetch('/api/history');
