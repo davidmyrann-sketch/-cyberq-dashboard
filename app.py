@@ -225,16 +225,26 @@ def poll_thread():
                     if state["user_set_temp"] is None:
                         state["user_set_temp"] = raw_st
 
-            cook_info = device.get("most_recent_cook", {})
-            cook_id   = cook_info.get("id") if cook_info else None
+            # Les alarm-temps fra enheten (meat_alarms: [type1,type2,type3, temp1,temp2,temp3, ...])
+            meat_alarms = device.get("meat_alarms", [])
+            if len(meat_alarms) >= 6:
+                for i in range(1, 4):
+                    if i not in state["food_alarms"]:
+                        tdc = meat_alarms[2 + i]   # indeks 3,4,5 = alarm-temp for probe 1,2,3
+                        if tdc and tdc > 0:
+                            state["food_alarms"][i] = tdc
+
+            # Les probe-navn fra cook
+            cook_info = device.get("most_recent_cook", {}) or {}
+            for i in range(1, 4):
+                if str(i) not in state["labels"]:
+                    name = cook_info.get(f"probe_name_{i}")
+                    if name:
+                        state["labels"][str(i)] = name
+
+            cook_id = cook_info.get("id") if cook_info else None
             if cook_id:
                 state["cook_id"] = cook_id
-
-            # Probe-navn fra enhetsnivå (om tilgjengelig)
-            for i in range(4):
-                key = f"probe_name_{i}"
-                if cook_info and cook_info.get(key):
-                    state["labels"].setdefault(str(i), cook_info[key])
 
             # 2. Siste datapunkter fra cook
             if cook_id and online:

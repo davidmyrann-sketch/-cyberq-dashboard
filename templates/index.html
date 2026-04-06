@@ -394,11 +394,33 @@
 </div>
 
 <script>
-let chart = null; // initialiseres lazy i initChart() når Chart.js CDN er lastet
+let chart = null;
+let cachedHistory = null;
 
 // Globale målverdier for graflinjer
 let pitTargetC    = null;
 const foodTargets = {1: null, 2: null, 3: null};
+
+// ── localStorage-persistens ────────────────────────────────────────────────
+const LS = {
+  save(key, val) { try { localStorage.setItem('cyberq_' + key, JSON.stringify(val)); } catch(e){} },
+  load(key, def) { try { const v = localStorage.getItem('cyberq_' + key); return v ? JSON.parse(v) : def; } catch(e){ return def; } }
+};
+
+// Last inn lagrede verdier ved oppstart
+(function restoreFromLS() {
+  // Timer-inputs (timer varighet brukeren satte sist)
+  const timers = LS.load('timer_inputs', {});
+  [1,2,3].forEach(i => {
+    const t = timers[i] || {h:0, m:0, s:0};
+    const th = document.getElementById(`food${i}-th`);
+    const tm = document.getElementById(`food${i}-tm`);
+    const ts = document.getElementById(`food${i}-ts`);
+    if(th) th.value = t.h;
+    if(tm) tm.value = t.m;
+    if(ts) ts.value = t.s;
+  });
+})();
 
 function tempHTML(c) {
   if (c === null || c === undefined) return '--<span class="temp-unit">°C</span>';
@@ -534,6 +556,21 @@ async function fetchStatus() {
   }
 }
 
+function applyHistoryToChart(h) {
+  if (!chart || !h || !h.length) return;
+  const n = h.length;
+  chart.data.labels          = h.map(p => p.ts);
+  chart.data.datasets[0].data = h.map(p => p.probe0);
+  chart.data.datasets[1].data = h.map(p => p.probe1);
+  chart.data.datasets[2].data = h.map(p => p.probe2);
+  chart.data.datasets[3].data = h.map(p => p.probe3);
+  chart.data.datasets[4].data = pitTargetC     != null ? Array(n).fill(pitTargetC)     : [];
+  chart.data.datasets[5].data = foodTargets[1] != null ? Array(n).fill(foodTargets[1]) : [];
+  chart.data.datasets[6].data = foodTargets[2] != null ? Array(n).fill(foodTargets[2]) : [];
+  chart.data.datasets[7].data = foodTargets[3] != null ? Array(n).fill(foodTargets[3]) : [];
+  chart.update();
+}
+
 function initChart() {
   if (chart || typeof Chart === 'undefined') return;
   try {
@@ -558,28 +595,17 @@ function initChart() {
         plugins: { legend:{ labels:{ color:'#aaa', filter: i => !i.text.includes('mål') || chart.data.datasets[i.datasetIndex].data.some(v=>v!=null) }}}
       }
     });
+    // Fyll inn cached historikk umiddelbart om tilgjengelig
+    if (cachedHistory) applyHistoryToChart(cachedHistory);
   } catch(e) { console.warn('Chart init feil:', e.message); }
 }
 
 async function fetchHistory() {
   initChart();
-  if (!chart) return;
   try {
     const r = await fetch('/api/history');
-    const h = await r.json();
-    const n = h.length;
-    chart.data.labels = h.map(p => p.ts);
-    // Faktiske temps
-    chart.data.datasets[0].data = h.map(p => p.probe0);
-    chart.data.datasets[1].data = h.map(p => p.probe1);
-    chart.data.datasets[2].data = h.map(p => p.probe2);
-    chart.data.datasets[3].data = h.map(p => p.probe3);
-    // Mållinjer (flat linje på gjeldende target)
-    chart.data.datasets[4].data = pitTargetC    != null ? Array(n).fill(pitTargetC)    : [];
-    chart.data.datasets[5].data = foodTargets[1]!= null ? Array(n).fill(foodTargets[1]) : [];
-    chart.data.datasets[6].data = foodTargets[2]!= null ? Array(n).fill(foodTargets[2]) : [];
-    chart.data.datasets[7].data = foodTargets[3]!= null ? Array(n).fill(foodTargets[3]) : [];
-    chart.update();
+    cachedHistory = await r.json();
+    applyHistoryToChart(cachedHistory);
   } catch(e) {}
 }
 
@@ -621,16 +647,25 @@ async function setFoodTemp(index) {
   const val = parseFloat(input.value);
   if (isNaN(val)) { toast('Skriv inn en temperatur', 'err'); return; }
   const d = await api('/api/set_food_temp', {index, temp_c: val});
-  if (d && d.ok) { toast(`✅ Mat ${index} alarm satt til ${val}°C`); input.value = ''; }
+  if (d && d.ok) {
+    toast(`✅ Mat ${index} alarm satt til ${val}°C`);
+    const alarms = LS.load('food_alarms', {});
+    alarms[index] = val;
+    LS.save('food_alarms', alarms);
+    input.value = '';
+  }
 }
-
-// Viften kan ikke overstyres manuelt — styres av PID i enheten.
 
 async function setName(index) {
   const nameMap = {1: 'food1', 2: 'food2', 3: 'food3'};
   const label = document.getElementById(nameMap[index] + '-name').value;
   const d = await api('/api/set_label', {index, label});
-  if (d && d.ok) toast(`✅ Navn oppdatert`);
+  if (d && d.ok) {
+    toast(`✅ Navn oppdatert`);
+    const names = LS.load('probe_names', {});
+    names[index] = label;
+    LS.save('probe_names', names);
+  }
 }
 
 function setOnline(mqtt) {
@@ -741,7 +776,14 @@ async function timerSet(index) {
   const s = parseInt(document.getElementById(`food${index}-ts`).value) || 0;
   if (h === 0 && m === 0 && s === 0) { toast('Sett timer til mer enn 0 sekunder', 'err'); return; }
   const d = await api('/api/timer', {index, action: 'set', hours: h, minutes: m, seconds: s});
-  if (d && d.ok) { toast(`⏱ Timer ${index} satt til ${h}t ${m}m ${s}s`); fetchStatus(); }
+  if (d && d.ok) {
+    toast(`⏱ Timer ${index} satt til ${h}t ${m}m ${s}s`);
+    // Lagre i localStorage
+    const timers = LS.load('timer_inputs', {});
+    timers[index] = {h, m, s};
+    LS.save('timer_inputs', timers);
+    fetchStatus();
+  }
 }
 
 async function timerAction(index, action) {
