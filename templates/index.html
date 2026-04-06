@@ -178,21 +178,14 @@
 
   <!-- Fan -->
   <div class="card fan-card">
-    <div class="card-label">Vifte</div>
+    <div class="card-label">Vifte — auto PID</div>
     <div class="card-name">Blåserstyrke</div>
     <div class="fan-pct" id="fan-pct">--%</div>
     <div class="fan-bar-wrap"><div class="fan-bar" id="fan-bar" style="width:0%"></div></div>
-    <div class="blower-row" style="margin-top:12px;">
-      <input type="range" id="blower-slider" min="0" max="100" step="5" value="0"
-             oninput="document.getElementById('blower-val').textContent=this.value+'%'">
-      <span id="blower-val" style="font-size:14px;font-weight:700;color:#f39c12;min-width:38px;">0%</span>
-      <button class="set-btn" onclick="setBlower()">Sett</button>
+    <div style="font-size:11px;color:#555;margin-top:10px;line-height:1.6;">
+      Viften styres automatisk av PID-algoritmen.<br>
+      Kontroller temperatur ved å sette <b>pit-mål</b>.
     </div>
-    <div style="display:flex;gap:8px;margin-top:10px;">
-      <button onclick="setBlowerAuto()" style="flex:1;background:#2a3a2a;border:1px solid #2ecc71;border-radius:8px;color:#2ecc71;cursor:pointer;font-size:12px;padding:7px 0;font-weight:600;">▶ Auto</button>
-      <button onclick="setBlowerPause()" style="flex:1;background:#3a2a2a;border:1px solid #e74c3c;border-radius:8px;color:#e74c3c;cursor:pointer;font-size:12px;padding:7px 0;font-weight:600;">⏸ Pause</button>
-    </div>
-    <div style="font-size:11px;color:#555;margin-top:6px;">Auto = PID-styring · Pause = stopp vifte</div>
   </div>
 </div>
 
@@ -522,25 +515,7 @@ async function setFoodTemp(index) {
   if (d && d.ok) { toast(`✅ Mat ${index} alarm satt til ${val}°C`); input.value = ''; }
 }
 
-async function setBlower() {
-  const pct = parseInt(document.getElementById('blower-slider').value);
-  const d = await api('/api/set_blower', {blower: pct});
-  if (d && d.ok) toast(`✅ Vifte satt til ${pct}%`);
-}
-
-async function setBlowerAuto() {
-  document.getElementById('blower-slider').value = 0;
-  document.getElementById('blower-val').textContent = '0%';
-  const d = await api('/api/set_blower', {blower: -1});  // -1 = tilbake til PID
-  if (d && d.ok) toast('✅ Vifte: automatisk PID');
-}
-
-async function setBlowerPause() {
-  document.getElementById('blower-slider').value = 0;
-  document.getElementById('blower-val').textContent = '0%';
-  const d = await api('/api/set_blower', {blower: 0});
-  if (d && d.ok) toast('⏸ Vifte pauset (0%)');
-}
+// Viften kan ikke overstyres manuelt — styres av PID i enheten.
 
 async function setName(index) {
   const nameMap = {1: 'food1', 2: 'food2', 3: 'food3'};

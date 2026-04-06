@@ -128,7 +128,7 @@ def run_advanced_control():
             if elapsed > OPEN_LID_PAUSE_S or recovered:
                 ctrl["open_lid"] = False
 
-    # ── 2. Food override: mat ferdig → stopp vifte ─────────────────────────────
+    # ── 2. Food override: mat ferdig → senk pit-mål til 60°C (kjøl ned) ─────────
     ctrl["food_override"] = False
     for idx in range(1, 4):
         alarm_tf = state["food_alarms"].get(idx)
@@ -140,8 +140,10 @@ def run_advanced_control():
                 ctrl["food_override_probe"] = idx
                 ctrl["ramping"]             = False
                 ctrl["ramp_factor"]         = 0.0
-                print(f"✅ Mat {idx} ferdig: {food_c}°C ≥ {alarm_c}°C — vifte stoppt")
-                mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_blower", "blower": 0}))
+                # Viften kan ikke stoppes direkte — senk pit-mål til 60°C
+                hold_tf = c_to_tf(60)
+                print(f"✅ Mat {idx} ferdig: {food_c}°C ≥ {alarm_c}°C — senker pit til 60°C")
+                mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_temp", "set_temp": hold_tf}))
                 return
 
     # ── 3. Ramp: senk pit-mål gradvis når mat nærmer seg target ───────────────
@@ -325,17 +327,6 @@ def api_set_temp():
     ctrl["ramp_locked_until"]   = time.time() + 120  # ikke overstyr de neste 2 min
     mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_temp", "set_temp": tf}))
     return jsonify({"ok": True, "set_c": temp_c})
-
-@app.route("/api/set_blower", methods=["POST"])
-def api_set_blower():
-    body = request.json
-    pct  = int(body.get("blower", 0))
-    if pct < 0:
-        mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_blower", "blower": -1}))
-        return jsonify({"ok": True, "blower": "auto"})
-    pct = max(0, min(100, pct))
-    mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_blower", "blower": pct * 100}))
-    return jsonify({"ok": True, "blower": pct})
 
 @app.route("/api/set_food_temp", methods=["POST"])
 def api_set_food_temp():
