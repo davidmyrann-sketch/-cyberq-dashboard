@@ -40,6 +40,13 @@
   .set-btn { background: #e8620a; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 12px; padding: 4px 10px; }
   .set-btn:hover { background: #cf5508; }
 
+  /* Target display */
+  .target-display { display:flex; align-items:baseline; gap:5px; margin: 6px 0 4px; }
+  .target-label { font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:#666; }
+  .target-val { font-size:22px; font-weight:700; color:#f39c12; }
+  .target-unit { font-size:13px; color:#888; }
+  .card.pit .target-val { color:#e8620a; }
+
   /* Toast */
   #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #222; border: 1px solid #444; border-radius: 10px; padding: 10px 20px; font-size: 13px; color: #eee; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200; }
   #toast.show { opacity: 1; }
@@ -99,8 +106,13 @@
     <div class="card-label">Grill / Pit</div>
     <div class="card-name">Temperatur</div>
     <div class="temp-main" id="pit-temp">--<span class="temp-unit">°C</span></div>
+    <div class="target-display" id="pit-target-display">
+      <span class="target-label">MÅL</span>
+      <span class="target-val" id="pit-target-val">--</span>
+      <span class="target-unit">°C</span>
+    </div>
     <div class="temp-set">
-      Mål: <input type="number" id="pit-set-input" min="0" max="300" step="1" placeholder="°C">
+      <input type="number" id="pit-set-input" min="0" max="300" step="1" placeholder="Ny måltemp °C">
       <button class="set-btn" onclick="setTemp('pit')">Sett</button>
     </div>
     <span class="status-badge status-OK" id="pit-status">--</span>
@@ -111,8 +123,13 @@
     <div class="card-label">Mat 1</div>
     <div class="card-name"><input type="text" id="food1-name" maxlength="16" onchange="setName(1)" placeholder="Mat 1"></div>
     <div class="temp-main" id="food1-temp">--<span class="temp-unit">°C</span></div>
+    <div class="target-display" id="food1-target-display" style="display:none;">
+      <span class="target-label">ALARM VED</span>
+      <span class="target-val" id="food1-target-val">--</span>
+      <span class="target-unit">°C</span>
+    </div>
     <div class="temp-set">
-      Alarm: <input type="number" id="food1-alarm-input" min="0" max="100" step="1" placeholder="°C">
+      <input type="number" id="food1-alarm-input" min="0" max="100" step="1" placeholder="Alarmtemp °C">
       <button class="set-btn" onclick="setFoodTemp(1)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food1-status">--</span>
@@ -123,8 +140,13 @@
     <div class="card-label">Mat 2</div>
     <div class="card-name"><input type="text" id="food2-name" maxlength="16" onchange="setName(2)" placeholder="Mat 2"></div>
     <div class="temp-main" id="food2-temp">--<span class="temp-unit">°C</span></div>
+    <div class="target-display" id="food2-target-display" style="display:none;">
+      <span class="target-label">ALARM VED</span>
+      <span class="target-val" id="food2-target-val">--</span>
+      <span class="target-unit">°C</span>
+    </div>
     <div class="temp-set">
-      Alarm: <input type="number" id="food2-alarm-input" min="0" max="100" step="1" placeholder="°C">
+      <input type="number" id="food2-alarm-input" min="0" max="100" step="1" placeholder="Alarmtemp °C">
       <button class="set-btn" onclick="setFoodTemp(2)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food2-status">--</span>
@@ -135,8 +157,13 @@
     <div class="card-label">Mat 3</div>
     <div class="card-name"><input type="text" id="food3-name" maxlength="16" onchange="setName(3)" placeholder="Mat 3"></div>
     <div class="temp-main" id="food3-temp">--<span class="temp-unit">°C</span></div>
+    <div class="target-display" id="food3-target-display" style="display:none;">
+      <span class="target-label">ALARM VED</span>
+      <span class="target-val" id="food3-target-val">--</span>
+      <span class="target-unit">°C</span>
+    </div>
     <div class="temp-set">
-      Alarm: <input type="number" id="food3-alarm-input" min="0" max="100" step="1" placeholder="°C">
+      <input type="number" id="food3-alarm-input" min="0" max="100" step="1" placeholder="Alarmtemp °C">
       <button class="set-btn" onclick="setFoodTemp(3)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food3-status">--</span>
@@ -148,14 +175,17 @@
     <div class="card-name">Blåserstyrke</div>
     <div class="fan-pct" id="fan-pct">--%</div>
     <div class="fan-bar-wrap"><div class="fan-bar" id="fan-bar" style="width:0%"></div></div>
-    <div class="blower-row">
+    <div class="blower-row" style="margin-top:12px;">
       <input type="range" id="blower-slider" min="0" max="100" step="5" value="0"
              oninput="document.getElementById('blower-val').textContent=this.value+'%'">
-      <span id="blower-val" style="font-size:13px;color:#f39c12;min-width:36px;">0%</span>
+      <span id="blower-val" style="font-size:14px;font-weight:700;color:#f39c12;min-width:38px;">0%</span>
       <button class="set-btn" onclick="setBlower()">Sett</button>
-      <button class="set-btn" onclick="setBlowerAuto()" style="background:#555;">Auto</button>
     </div>
-    <div style="font-size:11px;color:#555;margin-top:6px;">0% = automatisk PID-styring</div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="setBlowerAuto()" style="flex:1;background:#2a3a2a;border:1px solid #2ecc71;border-radius:8px;color:#2ecc71;cursor:pointer;font-size:12px;padding:7px 0;font-weight:600;">▶ Auto</button>
+      <button onclick="setBlowerPause()" style="flex:1;background:#3a2a2a;border:1px solid #e74c3c;border-radius:8px;color:#e74c3c;cursor:pointer;font-size:12px;padding:7px 0;font-weight:600;">⏸ Pause</button>
+    </div>
+    <div style="font-size:11px;color:#555;margin-top:6px;">Auto = PID-styring · Pause = stopp vifte</div>
   </div>
 </div>
 
@@ -281,11 +311,23 @@ async function fetchStatus() {
     document.getElementById('food2-temp').innerHTML = tempHTML(food2.c);
     document.getElementById('food3-temp').innerHTML = tempHTML(food3.c);
 
-    // Pit set-temp placeholder
-    if (document.activeElement.id !== 'pit-set-input') {
-      document.getElementById('pit-set-input').placeholder =
-        d.set_temp_c !== null && d.set_temp_c !== undefined ? d.set_temp_c + ' °C' : '°C';
+    // Pit måltemperatur
+    const pitTarget = d.set_temp_c;
+    if (pitTarget != null) {
+      document.getElementById('pit-target-val').textContent = pitTarget;
+      document.getElementById('pit-target-display').style.display = 'flex';
     }
+
+    // Mat-alarm temperaturer
+    const fa = d.food_alarm_c || {};
+    [1, 2, 3].forEach(i => {
+      const val = fa[String(i)];
+      const disp = document.getElementById('food' + i + '-target-display');
+      if (val != null) {
+        document.getElementById('food' + i + '-target-val').textContent = val;
+        disp.style.display = 'flex';
+      }
+    });
 
     // Probe names
     if (document.activeElement.id !== 'food1-name') document.getElementById('food1-name').value = food1.name || '';
@@ -364,14 +406,21 @@ async function setFoodTemp(index) {
 async function setBlower() {
   const pct = parseInt(document.getElementById('blower-slider').value);
   const d = await api('/api/set_blower', {blower: pct});
-  if (d && d.ok) toast(pct === 0 ? '✅ Vifte: automatisk' : `✅ Vifte satt til ${pct}%`);
+  if (d && d.ok) toast(`✅ Vifte satt til ${pct}%`);
 }
 
 async function setBlowerAuto() {
   document.getElementById('blower-slider').value = 0;
   document.getElementById('blower-val').textContent = '0%';
-  const d = await api('/api/set_blower', {blower: 0});
+  const d = await api('/api/set_blower', {blower: -1});  // -1 = tilbake til PID
   if (d && d.ok) toast('✅ Vifte: automatisk PID');
+}
+
+async function setBlowerPause() {
+  document.getElementById('blower-slider').value = 0;
+  document.getElementById('blower-val').textContent = '0%';
+  const d = await api('/api/set_blower', {blower: 0});
+  if (d && d.ok) toast('⏸ Vifte pauset (0%)');
 }
 
 async function setName(index) {

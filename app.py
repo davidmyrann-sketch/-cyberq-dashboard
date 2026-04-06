@@ -29,6 +29,7 @@ state    = {
     "last_data": 0,       # unix timestamp for siste mottatte temps-melding
     "temps": {},
     "set_temp": None,
+    "food_alarms": {},    # {1: tf, 2: tf, 3: tf}
     "blower": 0,
     "labels": {},
     "alarms": {},
@@ -146,12 +147,16 @@ def api_status():
             "type":  "pit" if i == 0 else "food",
         })
     set_c = tf_to_c(state["set_temp"]) if state["set_temp"] else None
+    food_alarm_c = {
+        str(k): tf_to_c(v) for k, v in state["food_alarms"].items() if v
+    }
     device_online = (time.time() - state["last_data"]) < 60
     return jsonify({
         "connected":     state["connected"],
         "device_online": device_online,
         "probes":        probes,
         "set_temp_c":    set_c,
+        "food_alarm_c":  food_alarm_c,
         "blower":        state["blower"],
         "ts":            state["ts"],
     })
@@ -174,6 +179,10 @@ def api_set_blower():
     """Manuell blåserstyring. Body: {blower: 50}  (0=auto, 1-100=manuell %)"""
     body = request.json
     pct  = int(body.get("blower", 0))
+    if pct < 0:
+        # -1 = tilbake til automatisk PID (send set_temp på nytt for å tvinge PID-modus)
+        mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_blower", "blower": -1}))
+        return jsonify({"ok": True, "blower": "auto"})
     pct  = max(0, min(100, pct))
     # Enheten bruker skala 0–10000
     raw  = pct * 100
@@ -188,6 +197,7 @@ def api_set_food_temp():
     temp_c = float(body.get("temp_c", 0))
     tf     = c_to_tf(temp_c)
     mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_food", "food": idx, "set_temp": tf}))
+    state["food_alarms"][idx] = tf
     return jsonify({"ok": True, "index": idx, "set_c": temp_c})
 
 @app.route("/api/set_label", methods=["POST"])
