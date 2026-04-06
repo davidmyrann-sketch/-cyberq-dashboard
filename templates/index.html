@@ -72,6 +72,16 @@
   .status-DONE { background: #2a2a1a; color: #f1c40f; }
   .status-ALARM { background: #4a1a1a; color: #e74c3c; }
   .status-ERROR { background: #3a1a1a; color: #e67e22; }
+  .status--- { background: #222; color: #555; }
+
+  /* Cook timer */
+  .timer-row { margin-top: 10px; display:flex; align-items:center; gap:8px; }
+  .timer-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: #ccc; min-width: 72px; }
+  .timer-val.running { color: #2ecc71; }
+  .timer-btns { display:flex; gap:4px; }
+  .timer-btn { background: #222; border: 1px solid #333; border-radius: 6px; color: #aaa; cursor: pointer; font-size: 13px; padding: 3px 8px; line-height: 1; }
+  .timer-btn:hover { background: #2a2a2a; border-color: #555; color: #eee; }
+  .timer-btn.active { background: #1a3a1a; border-color: #2ecc71; color: #2ecc71; }
 
   .fan-bar-wrap { margin-top: 10px; background: #222; border-radius: 20px; height: 10px; overflow: hidden; }
   .fan-bar { height: 100%; background: linear-gradient(90deg, #f39c12, #e74c3c); border-radius: 20px; transition: width 1s ease; }
@@ -140,6 +150,14 @@
       <button class="set-btn" onclick="setFoodTemp(1)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food1-status">--</span>
+    <div class="timer-row">
+      <span class="timer-val" id="food1-timer">00:00:00</span>
+      <div class="timer-btns">
+        <button class="timer-btn" id="food1-timer-start" onclick="timerAction(1,'start')" title="Start">▶</button>
+        <button class="timer-btn" id="food1-timer-stop"  onclick="timerAction(1,'stop')"  title="Pause">⏸</button>
+        <button class="timer-btn" id="food1-timer-reset" onclick="timerAction(1,'reset')" title="Nullstill">↺</button>
+      </div>
+    </div>
   </div>
 
   <!-- Food 2 -->
@@ -157,6 +175,14 @@
       <button class="set-btn" onclick="setFoodTemp(2)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food2-status">--</span>
+    <div class="timer-row">
+      <span class="timer-val" id="food2-timer">00:00:00</span>
+      <div class="timer-btns">
+        <button class="timer-btn" id="food2-timer-start" onclick="timerAction(2,'start')" title="Start">▶</button>
+        <button class="timer-btn" id="food2-timer-stop"  onclick="timerAction(2,'stop')"  title="Pause">⏸</button>
+        <button class="timer-btn" id="food2-timer-reset" onclick="timerAction(2,'reset')" title="Nullstill">↺</button>
+      </div>
+    </div>
   </div>
 
   <!-- Food 3 -->
@@ -174,6 +200,14 @@
       <button class="set-btn" onclick="setFoodTemp(3)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food3-status">--</span>
+    <div class="timer-row">
+      <span class="timer-val" id="food3-timer">00:00:00</span>
+      <div class="timer-btns">
+        <button class="timer-btn" id="food3-timer-start" onclick="timerAction(3,'start')" title="Start">▶</button>
+        <button class="timer-btn" id="food3-timer-stop"  onclick="timerAction(3,'stop')"  title="Pause">⏸</button>
+        <button class="timer-btn" id="food3-timer-reset" onclick="timerAction(3,'reset')" title="Nullstill">↺</button>
+      </div>
+    </div>
   </div>
 
   <!-- Fan -->
@@ -377,8 +411,8 @@ async function fetchStatus() {
       return;
     }
     if (!d.device_online) {
-      setOffline('Tilkoblet — venter på data fra enhet...');
-      // Still render whatever we have
+      document.getElementById('conn-dot').className    = 'dot online';
+      document.getElementById('conn-label').textContent = 'Tilkoblet (venter på data...)';
     } else {
       setOnline();
     }
@@ -440,9 +474,20 @@ async function fetchStatus() {
 
     // Status fra server (beregnet av compute_probe_status)
     updateStatus(document.getElementById('pit-status'),   pit.status   || 'ERROR');
-    updateStatus(document.getElementById('food1-status'), food1.status || '–––');
-    updateStatus(document.getElementById('food2-status'), food2.status || '–––');
-    updateStatus(document.getElementById('food3-status'), food3.status || '–––');
+    updateStatus(document.getElementById('food1-status'), food1.status || (food1.c != null ? 'OK' : '--'));
+    updateStatus(document.getElementById('food2-status'), food2.status || (food2.c != null ? 'OK' : '--'));
+    updateStatus(document.getElementById('food3-status'), food3.status || (food3.c != null ? 'OK' : '--'));
+
+    // Cook timers
+    const timers = d.cook_timers || {};
+    [1, 2, 3].forEach(i => {
+      const t = timers[String(i)];
+      if (!t) return;
+      const el = document.getElementById(`food${i}-timer`);
+      el.textContent = formatTime(t.elapsed);
+      el.className   = 'timer-val' + (t.running ? ' running' : '');
+      document.getElementById(`food${i}-timer-start`).className = 'timer-btn' + (t.running  ? ' active' : '');
+    });
 
     const fan = parseInt(d.blower) || 0;
     document.getElementById('fan-pct').textContent = fan + '%';
@@ -613,6 +658,20 @@ function wifiScan() {
 // ── Synkroniser (be enheten sende data) ───────────────────────────────────────
 async function syncDevice() {
   await fetch('/api/sync');
+}
+
+// ── Cook timer ────────────────────────────────────────────────────────────────
+function formatTime(secs) {
+  secs = Math.floor(secs || 0);
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+async function timerAction(index, action) {
+  const d = await api('/api/timer', {index, action});
+  if (d && d.ok) fetchStatus();
 }
 
 // Poll hvert 5. sekund

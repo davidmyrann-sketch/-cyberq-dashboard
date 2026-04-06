@@ -42,6 +42,11 @@ state    = {
     "alarms":         {},
     "ts":             "--",
     "raw_msgs":       deque(maxlen=20),
+    "cook_timers":    {
+        1: {"start": 0.0, "pause_elapsed": 0.0, "running": False},
+        2: {"start": 0.0, "pause_elapsed": 0.0, "running": False},
+        3: {"start": 0.0, "pause_elapsed": 0.0, "running": False},
+    },
 }
 
 ctrl = {
@@ -290,7 +295,17 @@ def api_status():
             "status": compute_probe_status(c, target, alarm_c),
         })
 
-    device_online = (time.time() - state["last_data"]) < 60
+    device_online = (time.time() - state["last_data"]) < 90
+
+    # Beregn timer-elapsed for kjørende timere
+    now = time.time()
+    timers_out = {}
+    for k, v in state["cook_timers"].items():
+        elapsed = v["pause_elapsed"]
+        if v["running"]:
+            elapsed += now - v["start"]
+        timers_out[str(k)] = {"running": v["running"], "elapsed": round(elapsed, 1)}
+
     return jsonify({
         "connected":       state["connected"],
         "device_online":   device_online,
@@ -301,6 +316,7 @@ def api_status():
         "blower":          state["blower"],
         "ts":              state["ts"],
         "settings":        settings,
+        "cook_timers":     timers_out,
         "ctrl": {
             "food_override":       ctrl["food_override"],
             "food_override_probe": ctrl["food_override_probe"],
@@ -340,6 +356,30 @@ def api_set_food_temp():
     if ctrl["food_override_probe"] == idx:
         ctrl["food_override"] = False
     return jsonify({"ok": True, "index": idx, "set_c": temp_c})
+
+@app.route("/api/timer", methods=["POST"])
+def api_timer():
+    body   = request.json
+    idx    = int(body.get("index", 1))
+    action = body.get("action", "start")
+    t      = state["cook_timers"].get(idx)
+    if t is None:
+        return jsonify({"ok": False, "error": "invalid index"})
+
+    now = time.time()
+    if action == "start":
+        if not t["running"]:
+            t["start"]   = now
+            t["running"] = True
+    elif action == "stop":
+        if t["running"]:
+            t["pause_elapsed"] += now - t["start"]
+            t["running"] = False
+    elif action == "reset":
+        t["start"]         = 0.0
+        t["pause_elapsed"] = 0.0
+        t["running"]       = False
+    return jsonify({"ok": True})
 
 @app.route("/api/set_label", methods=["POST"])
 def api_set_label():
