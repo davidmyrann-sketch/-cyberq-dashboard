@@ -53,10 +53,16 @@ state    = {
     "raw_msgs":       deque(maxlen=20),
     "cook_id":        None,
     "last_cnt":       0,
+    # Nedtellings-timer per mat-probe
+    # duration_s  = total nedtelling i sekunder (satt av bruker)
+    # start       = unix-tid da siste start/resume skjedde
+    # spent_s     = sekunder allerede brukt (akkumulert)
+    # running     = True mens den teller
+    # fired       = True etter timeout_action er utført
     "cook_timers":    {
-        1: {"start": 0.0, "pause_elapsed": 0.0, "running": False},
-        2: {"start": 0.0, "pause_elapsed": 0.0, "running": False},
-        3: {"start": 0.0, "pause_elapsed": 0.0, "running": False},
+        1: {"duration_s": 0.0, "start": 0.0, "spent_s": 0.0, "running": False, "fired": False},
+        2: {"duration_s": 0.0, "start": 0.0, "spent_s": 0.0, "running": False, "fired": False},
+        3: {"duration_s": 0.0, "start": 0.0, "spent_s": 0.0, "running": False, "fired": False},
     },
 }
 
@@ -181,6 +187,30 @@ def run_advanced_control():
                 ctrl["ramp_active_set_c"] = None
                 mqtt_publish({"name": "set_temp", "set_temp": base_tdc})
 
+# ── Timer-watcher ────────────────────────────────────────────────────────────
+def check_timers():
+    """
+    Sjekker om noen nedtellingstimere er ferdig.
+    Utfører timeout_action via MQTT når en timer når null.
+    """
+    now = time.time()
+    for idx, t in state["cook_timers"].items():
+        if not t["running"] or t["fired"] or t["duration_s"] <= 0:
+            continue
+        elapsed = t["spent_s"] + (now - t["start"])
+        remaining = t["duration_s"] - elapsed
+        if remaining <= 0:
+            t["running"] = False
+            t["fired"]   = True
+            action = settings.get("timeout_action", "Hold")
+            print(f"⏰ Timer {idx} ferdig — handling: {action}")
+            if action == "Shutdown":
+                # Senk pit-mål til 60°C — PID stopper viften naturlig
+                mqtt_publish({"name": "set_temp", "set_temp": c_to_tdc(60)})
+            elif action == "Alarm":
+                pass   # Visuell alarm i UI (se status-respons)
+            # Hold: gjør ingenting, pit-temp beholdes
+
 # ── HTTP polling thread ───────────────────────────────────────────────────────
 def poll_thread():
     """Henter siste data fra Flame Boss HTTP API hvert POLL_SECS sekund."""
@@ -251,8 +281,9 @@ def poll_thread():
                         }
                         history.append(entry)
 
-                    # Kjør avansert kontroll
+                    # Kjør avansert kontroll + timer-sjekk
                     threading.Thread(target=run_advanced_control, daemon=True).start()
+                    threading.Thread(target=check_timers, daemon=True).start()
 
                     msg = {"ts": ts, "cook_id": cook_id, "cnt": latest["cnt"],
                            "temps": raw_temps, "set_temp": latest["set_temp"],
@@ -346,10 +377,14 @@ def api_status():
     now = time.time()
     timers_out = {}
     for k, v in state["cook_timers"].items():
-        elapsed = v["pause_elapsed"]
-        if v["running"]:
-            elapsed += now - v["start"]
-        timers_out[str(k)] = {"running": v["running"], "elapsed": round(elapsed, 1)}
+        spent = v["spent_s"] + (now - v["start"] if v["running"] else 0)
+        remaining = max(0.0, v["duration_s"] - spent)
+        timers_out[str(k)] = {
+            "running":    v["running"],
+            "duration_s": v["duration_s"],
+            "remaining":  round(remaining, 1),
+            "fired":      v["fired"],
+        }
 
     return jsonify({
         "connected":       state["connected"],
@@ -416,6 +451,13 @@ def api_set_label():
 
 @app.route("/api/timer", methods=["POST"])
 def api_timer():
+    """
+    Actions:
+      set    — sett varighet: {index, action:"set", hours:H, minutes:M}
+      start  — start/gjenoppta nedtelling
+      pause  — pause
+      reset  — nullstill og stopp
+    """
     body   = request.json
     idx    = int(body.get("index", 1))
     action = body.get("action", "start")
@@ -423,18 +465,37 @@ def api_timer():
     if t is None:
         return jsonify({"ok": False})
     now = time.time()
-    if action == "start":
-        if not t["running"]:
+
+    if action == "set":
+        h = int(body.get("hours", 0))
+        m = int(body.get("minutes", 0))
+        duration = h * 3600 + m * 60
+        # Stopp løpende timer og sett ny varighet
+        t["duration_s"] = float(duration)
+        t["spent_s"]    = 0.0
+        t["start"]      = 0.0
+        t["running"]    = False
+        t["fired"]      = False
+
+    elif action == "start":
+        if not t["running"] and t["duration_s"] > 0 and not t["fired"]:
             t["start"]   = now
             t["running"] = True
-    elif action == "stop":
+
+    elif action == "pause":
         if t["running"]:
-            t["pause_elapsed"] += now - t["start"]
-            t["running"] = False
+            t["spent_s"] += now - t["start"]
+            t["running"]  = False
+
     elif action == "reset":
-        t["start"] = t["pause_elapsed"] = 0.0
-        t["running"] = False
-    return jsonify({"ok": True})
+        t["spent_s"]  = 0.0
+        t["start"]    = 0.0
+        t["running"]  = False
+        t["fired"]    = False
+
+    spent     = t["spent_s"] + (now - t["start"] if t["running"] else 0)
+    remaining = max(0.0, t["duration_s"] - spent)
+    return jsonify({"ok": True, "remaining": round(remaining, 1), "running": t["running"]})
 
 @app.route("/api/settings", methods=["POST"])
 def api_settings():

@@ -75,11 +75,22 @@
   .status--- { background: #222; color: #555; }
 
   /* Cook timer */
-  .timer-row { margin-top: 10px; display:flex; align-items:center; gap:8px; }
-  .timer-val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: #ccc; min-width: 72px; }
-  .timer-val.running { color: #2ecc71; }
+  .timer-section { margin-top: 12px; border-top: 1px solid #2a2a2a; padding-top: 10px; }
+  .timer-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #555; margin-bottom: 6px; }
+  .timer-set-row { display:flex; align-items:center; gap:4px; margin-bottom:6px; }
+  .timer-set-row input { background:#222; border:1px solid #333; border-radius:6px; color:#eee; font-size:13px; padding:4px 6px; width:52px; outline:none; text-align:center; }
+  .timer-set-row input:focus { border-color:#e8620a; }
+  .timer-set-row span { color:#555; font-size:14px; }
+  .timer-set-btn { background:#e8620a; border:none; border-radius:6px; color:white; cursor:pointer; font-size:11px; padding:5px 10px; white-space:nowrap; }
+  .timer-set-btn:hover { background:#cf5508; }
+  .timer-display-row { display:flex; align-items:center; gap:8px; }
+  .timer-countdown { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: #ccc; min-width: 80px; letter-spacing: 1px; }
+  .timer-countdown.running { color: #2ecc71; }
+  .timer-countdown.fired   { color: #e74c3c; animation: pulse 1s infinite; }
+  .timer-countdown.empty   { color: #444; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
   .timer-btns { display:flex; gap:4px; }
-  .timer-btn { background: #222; border: 1px solid #333; border-radius: 6px; color: #aaa; cursor: pointer; font-size: 13px; padding: 3px 8px; line-height: 1; }
+  .timer-btn { background: #222; border: 1px solid #333; border-radius: 6px; color: #aaa; cursor: pointer; font-size: 13px; padding: 4px 9px; }
   .timer-btn:hover { background: #2a2a2a; border-color: #555; color: #eee; }
   .timer-btn.active { background: #1a3a1a; border-color: #2ecc71; color: #2ecc71; }
 
@@ -150,12 +161,21 @@
       <button class="set-btn" onclick="setFoodTemp(1)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food1-status">--</span>
-    <div class="timer-row">
-      <span class="timer-val" id="food1-timer">00:00:00</span>
-      <div class="timer-btns">
-        <button class="timer-btn" id="food1-timer-start" onclick="timerAction(1,'start')" title="Start">▶</button>
-        <button class="timer-btn" id="food1-timer-stop"  onclick="timerAction(1,'stop')"  title="Pause">⏸</button>
-        <button class="timer-btn" id="food1-timer-reset" onclick="timerAction(1,'reset')" title="Nullstill">↺</button>
+    <div class="timer-section">
+      <div class="timer-label">⏱ Koketimer</div>
+      <div class="timer-set-row">
+        <input type="number" id="food1-th" min="0" max="23" value="0" placeholder="tt">
+        <span>:</span>
+        <input type="number" id="food1-tm" min="0" max="59" value="0" placeholder="mm">
+        <button class="timer-set-btn" onclick="timerSet(1)">Sett</button>
+      </div>
+      <div class="timer-display-row">
+        <span class="timer-countdown empty" id="food1-timer">--:--</span>
+        <div class="timer-btns">
+          <button class="timer-btn" id="food1-timer-start" onclick="timerAction(1,'start')" title="Start">▶</button>
+          <button class="timer-btn" id="food1-timer-pause" onclick="timerAction(1,'pause')" title="Pause">⏸</button>
+          <button class="timer-btn" id="food1-timer-reset" onclick="timerAction(1,'reset')" title="Nullstill">↺</button>
+        </div>
       </div>
     </div>
   </div>
@@ -175,12 +195,21 @@
       <button class="set-btn" onclick="setFoodTemp(2)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food2-status">--</span>
-    <div class="timer-row">
-      <span class="timer-val" id="food2-timer">00:00:00</span>
-      <div class="timer-btns">
-        <button class="timer-btn" id="food2-timer-start" onclick="timerAction(2,'start')" title="Start">▶</button>
-        <button class="timer-btn" id="food2-timer-stop"  onclick="timerAction(2,'stop')"  title="Pause">⏸</button>
-        <button class="timer-btn" id="food2-timer-reset" onclick="timerAction(2,'reset')" title="Nullstill">↺</button>
+    <div class="timer-section">
+      <div class="timer-label">⏱ Koketimer</div>
+      <div class="timer-set-row">
+        <input type="number" id="food2-th" min="0" max="23" value="0" placeholder="tt">
+        <span>:</span>
+        <input type="number" id="food2-tm" min="0" max="59" value="0" placeholder="mm">
+        <button class="timer-set-btn" onclick="timerSet(2)">Sett</button>
+      </div>
+      <div class="timer-display-row">
+        <span class="timer-countdown empty" id="food2-timer">--:--</span>
+        <div class="timer-btns">
+          <button class="timer-btn" id="food2-timer-start" onclick="timerAction(2,'start')" title="Start">▶</button>
+          <button class="timer-btn" id="food2-timer-pause" onclick="timerAction(2,'pause')" title="Pause">⏸</button>
+          <button class="timer-btn" id="food2-timer-reset" onclick="timerAction(2,'reset')" title="Nullstill">↺</button>
+        </div>
       </div>
     </div>
   </div>
@@ -200,12 +229,21 @@
       <button class="set-btn" onclick="setFoodTemp(3)">Sett</button>
     </div>
     <span class="status-badge status-OK" id="food3-status">--</span>
-    <div class="timer-row">
-      <span class="timer-val" id="food3-timer">00:00:00</span>
-      <div class="timer-btns">
-        <button class="timer-btn" id="food3-timer-start" onclick="timerAction(3,'start')" title="Start">▶</button>
-        <button class="timer-btn" id="food3-timer-stop"  onclick="timerAction(3,'stop')"  title="Pause">⏸</button>
-        <button class="timer-btn" id="food3-timer-reset" onclick="timerAction(3,'reset')" title="Nullstill">↺</button>
+    <div class="timer-section">
+      <div class="timer-label">⏱ Koketimer</div>
+      <div class="timer-set-row">
+        <input type="number" id="food3-th" min="0" max="23" value="0" placeholder="tt">
+        <span>:</span>
+        <input type="number" id="food3-tm" min="0" max="59" value="0" placeholder="mm">
+        <button class="timer-set-btn" onclick="timerSet(3)">Sett</button>
+      </div>
+      <div class="timer-display-row">
+        <span class="timer-countdown empty" id="food3-timer">--:--</span>
+        <div class="timer-btns">
+          <button class="timer-btn" id="food3-timer-start" onclick="timerAction(3,'start')" title="Start">▶</button>
+          <button class="timer-btn" id="food3-timer-pause" onclick="timerAction(3,'pause')" title="Pause">⏸</button>
+          <button class="timer-btn" id="food3-timer-reset" onclick="timerAction(3,'reset')" title="Nullstill">↺</button>
+        </div>
       </div>
     </div>
   </div>
@@ -462,9 +500,18 @@ async function fetchStatus() {
     if (c.open_lid)
       banners.push(`<div class="banner banner-lid">🔓 Lokk åpnet — vifte pauset i 45s</div>`);
     if (c.food_override)
-      banners.push(`<div class="banner banner-done">✅ Mat ${c.food_override_probe} ferdig — vifte stoppet!</div>`);
+      banners.push(`<div class="banner banner-done">✅ Mat ${c.food_override_probe} ferdig — pit senket til 60°C</div>`);
     if (c.ramping && !c.food_override)
       banners.push(`<div class="banner banner-ramp">📉 Ramp aktiv — pit-mål senkes (${Math.round(c.ramp_factor*100)}%)</div>`);
+    // Timer-alarmer
+    const timers2 = d.cook_timers || {};
+    [1,2,3].forEach(i => {
+      const t = timers2[String(i)];
+      if (t && t.fired) {
+        const action = (d.settings || {}).timeout_action || 'Hold';
+        banners.push(`<div class="banner banner-done">⏰ Koketimer Mat ${i} ferdig — ${action}</div>`);
+      }
+    });
     document.getElementById('banners').innerHTML = banners.join('');
 
     // Probe names
@@ -478,15 +525,24 @@ async function fetchStatus() {
     updateStatus(document.getElementById('food2-status'), food2.status || (food2.c != null ? 'OK' : '--'));
     updateStatus(document.getElementById('food3-status'), food3.status || (food3.c != null ? 'OK' : '--'));
 
-    // Cook timers
+    // Cook timers — nedtelling
     const timers = d.cook_timers || {};
     [1, 2, 3].forEach(i => {
       const t = timers[String(i)];
       if (!t) return;
-      const el = document.getElementById(`food${i}-timer`);
-      el.textContent = formatTime(t.elapsed);
-      el.className   = 'timer-val' + (t.running ? ' running' : '');
-      document.getElementById(`food${i}-timer-start`).className = 'timer-btn' + (t.running  ? ' active' : '');
+      const el    = document.getElementById(`food${i}-timer`);
+      const start = document.getElementById(`food${i}-timer-start`);
+      if (t.duration_s <= 0) {
+        el.textContent = '--:--';
+        el.className   = 'timer-countdown empty';
+      } else if (t.fired) {
+        el.textContent = '00:00';
+        el.className   = 'timer-countdown fired';
+      } else {
+        el.textContent = formatCountdown(t.remaining);
+        el.className   = 'timer-countdown' + (t.running ? ' running' : '');
+      }
+      start.className = 'timer-btn' + (t.running ? ' active' : '');
     });
 
     const fan = parseInt(d.blower) || 0;
@@ -661,12 +717,22 @@ async function syncDevice() {
 }
 
 // ── Cook timer ────────────────────────────────────────────────────────────────
-function formatTime(secs) {
-  secs = Math.floor(secs || 0);
+function formatCountdown(secs) {
+  secs = Math.max(0, Math.floor(secs || 0));
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  if (h > 0)
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+async function timerSet(index) {
+  const h = parseInt(document.getElementById(`food${index}-th`).value) || 0;
+  const m = parseInt(document.getElementById(`food${index}-tm`).value) || 0;
+  if (h === 0 && m === 0) { toast('Sett timer til mer enn 0 minutter', 'err'); return; }
+  const d = await api('/api/timer', {index, action: 'set', hours: h, minutes: m});
+  if (d && d.ok) { toast(`⏱ Timer ${index} satt til ${h}t ${m}m`); fetchStatus(); }
 }
 
 async function timerAction(index, action) {
