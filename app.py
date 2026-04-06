@@ -49,10 +49,11 @@ ctrl = {
     "food_override_probe": None,
     "ramping":             False,
     "ramp_factor":         0.0,
-    "ramp_active_set_c":   None,   # nedskrudd pit-mål under ramp
+    "ramp_active_set_c":   None,
     "open_lid":            False,
     "open_lid_since":      0.0,
-    "pit_history":         deque(maxlen=8),   # (ts, °C)
+    "pit_history":         deque(maxlen=8),
+    "ramp_locked_until":   0.0,    # ikke ramp før dette tidspunktet
 }
 
 # ── Konverteringshjelpere ──────────────────────────────────────────────────────
@@ -125,6 +126,9 @@ def run_advanced_control():
                 return
 
     # ── 3. Ramp: senk pit-mål gradvis når mat nærmer seg target ───────────────
+    if now < ctrl["ramp_locked_until"]:
+        return   # bruker har nettopp satt temp manuelt — ikke overstyr
+
     if base_c is not None:
         worst_factor = 0.0
         for idx in range(1, 4):
@@ -288,9 +292,11 @@ def api_set_temp():
     body   = request.json
     temp_c = float(body.get("temp_c", 0))
     tf     = c_to_tf(temp_c)
-    state["user_set_temp"] = tf          # lagre brukerens ønskede mål
-    ctrl["ramping"]        = False       # reset ramp ved ny brukerinnstilling
-    ctrl["ramp_factor"]    = 0.0
+    state["user_set_temp"]      = tf
+    ctrl["ramping"]             = False
+    ctrl["ramp_factor"]         = 0.0
+    ctrl["ramp_active_set_c"]   = None
+    ctrl["ramp_locked_until"]   = time.time() + 120  # ikke overstyr de neste 2 min
     mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_temp", "set_temp": tf}))
     return jsonify({"ok": True, "set_c": temp_c})
 
@@ -326,6 +332,7 @@ def api_set_label():
     labels = [state["labels"].get(str(i), "") for i in range(4)]
     labels[idx] = label
     mqttc.publish(TOPIC_RECV, json.dumps({"name": "labels", "labels": labels}))
+    state["labels"][str(idx)] = label   # oppdater lokalt med én gang
     return jsonify({"ok": True})
 
 @app.route("/api/sync")
