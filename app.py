@@ -3,7 +3,7 @@
 CyberQ Dashboard — MQTT-basert, kobler til via myflameboss.com
 Device ID: 324579 | Host: s2.myflameboss.com
 """
-import json, time, threading, ssl, os
+import json, time, threading, ssl, os, uuid
 from flask import Flask, render_template, jsonify, request
 from collections import deque
 from datetime import datetime
@@ -13,10 +13,11 @@ app = Flask(__name__)
 
 # ── Credentials ───────────────────────────────────────────────────────────────
 MQTT_HOST   = "s2.myflameboss.com"
-MQTT_PORT   = 8883
+MQTT_PORT   = 8084          # WebSocket over TLS — brukes av ShareMyCook (8883 TCP blokkeres av Railway)
 MQTT_USER   = "T-252541"
 MQTT_PASS   = "hx9HHAh49xSR3F6rb6KyuF87fQADvGai1Q"
 DEVICE_ID   = "324579"
+MQTT_CID    = f"cyberq-{uuid.uuid4().hex[:8]}"  # unik klient-ID per oppstart
 
 TOPIC_DATA  = f"flameboss/{DEVICE_ID}/send/data"
 TOPIC_OPEN  = f"flameboss/{DEVICE_ID}/send/open"
@@ -248,8 +249,13 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"Meldingsfeil: {e} — {msg.payload}")
 
-# ── MQTT klient ───────────────────────────────────────────────────────────────
-mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+# ── MQTT klient (WebSocket transport — kompatibel med Railway / port 8084) ────
+mqttc = mqtt.Client(
+    mqtt.CallbackAPIVersion.VERSION2,
+    client_id=MQTT_CID,
+    transport="websockets",
+)
+mqttc.ws_set_options(path="/mqtt")
 mqttc.username_pw_set(MQTT_USER, MQTT_PASS)
 mqttc.tls_set(cert_reqs=ssl.CERT_NONE)
 mqttc.tls_insecure_set(True)
@@ -258,13 +264,17 @@ mqttc.on_disconnect = on_disconnect
 mqttc.on_message    = on_message
 
 def mqtt_thread():
+    delay = 5
     while True:
         try:
+            print(f"MQTT kobler til {MQTT_HOST}:{MQTT_PORT} (wss, id={MQTT_CID})")
             mqttc.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
             mqttc.loop_forever()
+            delay = 5   # reset etter vellykket tilkobling
         except Exception as e:
-            print(f"MQTT feil: {e} — prøver igjen om 10s")
-            time.sleep(10)
+            print(f"MQTT feil: {e} — prøver igjen om {delay}s")
+            time.sleep(delay)
+            delay = min(delay * 2, 120)
 
 t = threading.Thread(target=mqtt_thread, daemon=True)
 t.start()
