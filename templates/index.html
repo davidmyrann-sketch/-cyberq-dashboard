@@ -99,7 +99,8 @@
   </div>
   <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
     <button onclick="syncDevice()" style="background:#2a2a2a;border:1px solid #444;border-radius:8px;color:#ccc;cursor:pointer;font-size:12px;padding:6px 14px;">🔄 Synkroniser</button>
-    <button onclick="openWifi()" style="background:#2a2a2a;border:1px solid #444;border-radius:8px;color:#ccc;cursor:pointer;font-size:12px;padding:6px 14px;">📶 WiFi-oppsett</button>
+    <button onclick="openSettings()" style="background:#2a2a2a;border:1px solid #444;border-radius:8px;color:#ccc;cursor:pointer;font-size:12px;padding:6px 14px;">⚙️ Innstillinger</button>
+    <button onclick="openWifi()" style="background:#2a2a2a;border:1px solid #444;border-radius:8px;color:#ccc;cursor:pointer;font-size:12px;padding:6px 14px;">📶 WiFi</button>
     <button onclick="testConn()" style="background:#2a2a2a;border:1px solid #444;border-radius:8px;color:#ccc;cursor:pointer;font-size:12px;padding:6px 14px;">🔌 Status</button>
     <span id="conn-label">Kobler til...</span>
     <div class="dot" id="conn-dot"></div>
@@ -237,6 +238,79 @@
   </div>
 </div>
 
+<!-- Settings modal -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#1a1a1a;border:1px solid #333;border-radius:14px;padding:28px;width:min(480px,95vw);max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="color:#e8620a;font-size:16px;">⚙️ Enhetsinnstillinger</h2>
+      <button onclick="closeSettings()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;">✕</button>
+    </div>
+
+    <!-- Open lid detect -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Åpent lokk-deteksjon</div>
+      <div style="display:flex;gap:8px;">
+        <button id="s-lid-on"  onclick="setSetting('opendetect',1)" style="flex:1;padding:8px;border-radius:8px;border:1px solid #444;background:#1a1a1a;color:#ccc;cursor:pointer;font-size:12px;">✅ På (hardware)</button>
+        <button id="s-lid-off" onclick="setSetting('opendetect',0)" style="flex:1;padding:8px;border-radius:8px;border:1px solid #444;background:#1a1a1a;color:#ccc;cursor:pointer;font-size:12px;">🔕 Av</button>
+      </div>
+      <div style="font-size:11px;color:#555;margin-top:5px;">Enheten pauser viften automatisk når lokket åpnes</div>
+    </div>
+
+    <!-- Cook ramp -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Cook Ramp — probe styrer sluttfasen</div>
+      <select id="s-cook-ramp" onchange="setSetting('cook_ramp', parseInt(this.value))"
+              style="width:100%;background:#222;border:1px solid #333;border-radius:8px;color:#eee;font-size:13px;padding:8px 12px;outline:none;">
+        <option value="0">Av</option>
+        <option value="1">Mat 1</option>
+        <option value="2">Mat 2</option>
+        <option value="3">Mat 3</option>
+      </select>
+      <div style="font-size:11px;color:#555;margin-top:5px;">Enheten reduserer pit-temp gradvis når valgt probe nærmer seg mål</div>
+    </div>
+
+    <!-- Timeout action -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Handling når mat er ferdig</div>
+      <select id="s-timeout-action" onchange="setSetting('timeout_action', this.value)"
+              style="width:100%;background:#222;border:1px solid #333;border-radius:8px;color:#eee;font-size:13px;padding:8px 12px;outline:none;">
+        <option value="Hold">Hold (hold temperatur)</option>
+        <option value="Alarm">Alarm (gi lyd)</option>
+        <option value="Shutdown">Shutdown (slå av)</option>
+      </select>
+    </div>
+
+    <!-- PID -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">PID-innstillinger</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="font-size:11px;color:#666;margin-bottom:4px;">Proporsjonsband (°F)</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="number" id="s-propband" min="1" max="50" value="5"
+                   style="background:#222;border:1px solid #333;border-radius:6px;color:#eee;font-size:13px;padding:6px 8px;width:70px;outline:none;">
+            <button onclick="setSetting('propband', parseInt(document.getElementById('s-propband').value))"
+                    style="background:#e8620a;border:none;border-radius:6px;color:white;cursor:pointer;font-size:11px;padding:6px 10px;">Sett</button>
+          </div>
+          <div style="font-size:10px;color:#555;margin-top:3px;">Typisk: 5–15</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#666;margin-bottom:4px;">Syklustid (sek)</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="number" id="s-cyctime" min="5" max="60" value="20"
+                   style="background:#222;border:1px solid #333;border-radius:6px;color:#eee;font-size:13px;padding:6px 8px;width:70px;outline:none;">
+            <button onclick="setSetting('cyctime', parseInt(document.getElementById('s-cyctime').value))"
+                    style="background:#e8620a;border:none;border-radius:6px;color:white;cursor:pointer;font-size:11px;padding:6px 10px;">Sett</button>
+          </div>
+          <div style="font-size:10px;color:#555;margin-top:3px;">Typisk: 10–30</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-msg" style="font-size:12px;color:#888;text-align:center;min-height:20px;"></div>
+  </div>
+</div>
+
 <!-- Tilkoblingsdiagnose modal -->
 <div id="diag-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;align-items:center;justify-content:center;">
   <div style="background:#1a1a1a;border:1px solid #333;border-radius:14px;padding:28px;width:min(420px,95vw);">
@@ -371,16 +445,17 @@ async function fetchStatus() {
     if (document.activeElement.id !== 'food2-name') document.getElementById('food2-name').value = food2.name || '';
     if (document.activeElement.id !== 'food3-name') document.getElementById('food3-name').value = food3.name || '';
 
-    const sc = d.set_temp_c;
-    updateStatus(document.getElementById('pit-status'),   pit.c   != null ? tempStatus(pit.c, sc)    : 'ERROR');
-    updateStatus(document.getElementById('food1-status'), food1.c != null ? 'OK'                      : '–––');
-    updateStatus(document.getElementById('food2-status'), food2.c != null ? 'OK'                      : '–––');
-    updateStatus(document.getElementById('food3-status'), food3.c != null ? 'OK'                      : '–––');
+    // Status fra server (beregnet av compute_probe_status)
+    updateStatus(document.getElementById('pit-status'),   pit.status   || 'ERROR');
+    updateStatus(document.getElementById('food1-status'), food1.status || '–––');
+    updateStatus(document.getElementById('food2-status'), food2.status || '–––');
+    updateStatus(document.getElementById('food3-status'), food3.status || '–––');
 
     const fan = parseInt(d.blower) || 0;
     document.getElementById('fan-pct').textContent = fan + '%';
     document.getElementById('fan-bar').style.width = fan + '%';
     document.getElementById('ts-bar').textContent = 'Sist oppdatert: ' + d.ts;
+    loadSettingsUI(d.settings);
   } catch(e) {
     setOffline(e.message);
   }
@@ -511,6 +586,39 @@ async function testConn() {
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = '<span style="color:#e74c3c;">Feil: ' + e.message + '</span>';
+  }
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('settings-modal').style.display = 'flex';
+}
+function closeSettings() {
+  document.getElementById('settings-modal').style.display = 'none';
+}
+
+function loadSettingsUI(s) {
+  if (!s) return;
+  // Open lid
+  document.getElementById('s-lid-on').style.background  = s.opendetect ? '#1a3a1a' : '#1a1a1a';
+  document.getElementById('s-lid-off').style.background = s.opendetect ? '#1a1a1a' : '#3a1a1a';
+  // Ramp
+  document.getElementById('s-cook-ramp').value = s.cook_ramp;
+  // Timeout
+  document.getElementById('s-timeout-action').value = s.timeout_action;
+  // PID
+  document.getElementById('s-propband').value = s.propband;
+  document.getElementById('s-cyctime').value  = s.cyctime;
+}
+
+async function setSetting(key, value) {
+  const d = await api('/api/settings', {[key]: value});
+  if (d && d.ok) {
+    loadSettingsUI(d.settings);
+    const msg = document.getElementById('settings-msg');
+    msg.style.color = '#2ecc71';
+    msg.textContent = `✅ ${key} oppdatert`;
+    setTimeout(() => msg.textContent = '', 2000);
   }
 }
 

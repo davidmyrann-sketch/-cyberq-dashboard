@@ -53,8 +53,34 @@ ctrl = {
     "open_lid":            False,
     "open_lid_since":      0.0,
     "pit_history":         deque(maxlen=8),
-    "ramp_locked_until":   0.0,    # ikke ramp før dette tidspunktet
+    "ramp_locked_until":   0.0,
 }
+
+# Enhetens innstillinger (fra ha_cyberq-læring)
+settings = {
+    "opendetect":      1,      # 1 = hardware open lid detect på
+    "cook_ramp":       0,      # 0=av, 1=Food1, 2=Food2, 3=Food3
+    "propband":        5,      # °F proporsjonsband (PID)
+    "cyctime":         20,     # sekunder PID-syklustid
+    "timeout_action":  "Hold", # Hold | Alarm | Shutdown
+}
+
+# Status-koder fra ha_cyberq (COOK_STATUS, FOOD1_STATUS etc.)
+STATUS_MAP = {0: "OK", 1: "DONE", 2: "HIGH", 3: "LOW", 4: "ERROR", 5: "ALARM", 6: "HOLD", 7: "SHUTDOWN"}
+
+def compute_probe_status(c, target_c, alarm_c=None):
+    """Beregn status-kode basert på ha_cyberq logikk."""
+    if c is None:
+        return "ERROR"
+    if alarm_c is not None and c >= alarm_c:
+        return "DONE"
+    if target_c is not None:
+        deviation = c - target_c
+        if deviation > 8:
+            return "HIGH"
+        if deviation < -8:
+            return "LOW"
+    return "OK"
 
 # ── Konverteringshjelpere ──────────────────────────────────────────────────────
 def tf_to_c(tenths_f):
@@ -80,34 +106,27 @@ def run_advanced_control():
     base_tf = state["user_set_temp"] or state["set_temp"]
     base_c  = tf_to_c(base_tf) if base_tf else None
 
-    # ── 1. Open lid detection ──────────────────────────────────────────────────
+    # ── 1. Open lid detection (hardware via OPENDETECT-innstilling) ───────────
+    # Spor pit-historikk for visning, men la enheten håndtere selve deteksjonen
     if pit_c is not None:
         ctrl["pit_history"].append((now, pit_c))
         hist = list(ctrl["pit_history"])
-        if len(hist) >= 2:
+        # Detekter visuelt for banneret (informasjon kun, ingen MQTT-kommando)
+        if len(hist) >= 2 and settings["opendetect"] == 0:
+            # Software fallback kun hvis hardware-detect er slått av
             for old_ts, old_t in hist[:-1]:
                 if now - old_ts <= 30 and (old_t - pit_c) >= OPEN_LID_DROP_C:
                     if not ctrl["open_lid"]:
                         ctrl["open_lid"]       = True
                         ctrl["open_lid_since"] = now
-                        print(f"🔓 Lokk åpnet — fall {old_t:.1f}→{pit_c:.1f}°C")
+                        print(f"🔓 Lokk åpnet (software) — fall {old_t:.1f}→{pit_c:.1f}°C")
                     break
-
-    if ctrl["open_lid"]:
-        elapsed = now - ctrl["open_lid_since"]
-        # Gjenåpne: temp har stabilisert seg ELLER timeout
-        hist = list(ctrl["pit_history"])
-        recovered = (
-            len(hist) >= 3
-            and all(abs(hist[i][1] - hist[i-1][1]) < 2 for i in range(-2, 0))
-        )
-        if elapsed > OPEN_LID_PAUSE_S or recovered:
-            ctrl["open_lid"] = False
-            print("🔒 Lokk lukket igjen — gjenopptar normal drift")
-        else:
-            # Stopp viften, ikke endre set_temp
-            mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_blower", "blower": 0}))
-            return
+        if ctrl["open_lid"] and settings["opendetect"] == 0:
+            elapsed = now - ctrl["open_lid_since"]
+            hist = list(ctrl["pit_history"])
+            recovered = len(hist) >= 3 and all(abs(hist[i][1] - hist[i-1][1]) < 2 for i in range(-2, 0))
+            if elapsed > OPEN_LID_PAUSE_S or recovered:
+                ctrl["open_lid"] = False
 
     # ── 2. Food override: mat ferdig → stopp vifte ─────────────────────────────
     ctrl["food_override"] = False
@@ -250,29 +269,36 @@ def index():
 
 @app.route("/api/status")
 def api_status():
-    probes    = []
-    label_map = state.get("labels", {})
-    for i in range(4):
-        t_data = state["temps"].get(i, {})
-        probes.append({
-            "index": i,
-            "name":  label_map.get(str(i), f"Probe {i}"),
-            "c":     t_data.get("c"),
-            "type":  "pit" if i == 0 else "food",
-        })
-    set_c      = tf_to_c(state["set_temp"]) if state["set_temp"] else None
-    user_set_c = tf_to_c(state["user_set_temp"]) if state["user_set_temp"] else None
+    label_map    = state.get("labels", {})
+    set_c        = tf_to_c(state["set_temp"]) if state["set_temp"] else None
+    user_set_c   = tf_to_c(state["user_set_temp"]) if state["user_set_temp"] else None
     food_alarm_c = {str(k): tf_to_c(v) for k, v in state["food_alarms"].items() if v}
+
+    probes = []
+    for i in range(4):
+        t_data  = state["temps"].get(i, {})
+        c       = t_data.get("c")
+        alarm_c = food_alarm_c.get(str(i)) if i > 0 else None
+        target  = set_c if i == 0 else None
+        probes.append({
+            "index":  i,
+            "name":   label_map.get(str(i), "Pit" if i == 0 else f"Mat {i}"),
+            "c":      c,
+            "type":   "pit" if i == 0 else "food",
+            "status": compute_probe_status(c, target, alarm_c),
+        })
+
     device_online = (time.time() - state["last_data"]) < 60
     return jsonify({
-        "connected":     state["connected"],
-        "device_online": device_online,
-        "probes":        probes,
-        "set_temp_c":    set_c,
+        "connected":       state["connected"],
+        "device_online":   device_online,
+        "probes":          probes,
+        "set_temp_c":      set_c,
         "user_set_temp_c": user_set_c,
-        "food_alarm_c":  food_alarm_c,
-        "blower":        state["blower"],
-        "ts":            state["ts"],
+        "food_alarm_c":    food_alarm_c,
+        "blower":          state["blower"],
+        "ts":              state["ts"],
+        "settings":        settings,
         "ctrl": {
             "food_override":       ctrl["food_override"],
             "food_override_probe": ctrl["food_override_probe"],
@@ -334,6 +360,38 @@ def api_set_label():
     mqttc.publish(TOPIC_RECV, json.dumps({"name": "labels", "labels": labels}))
     state["labels"][str(idx)] = label   # oppdater lokalt med én gang
     return jsonify({"ok": True})
+
+@app.route("/api/settings", methods=["POST"])
+def api_settings():
+    """Oppdater enhetsinnstillinger. Body: {opendetect:1, cook_ramp:1, propband:5, cyctime:20, timeout_action:'Hold'}"""
+    body = request.json
+
+    if "opendetect" in body:
+        v = int(body["opendetect"])
+        settings["opendetect"] = v
+        mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_opendetect", "opendetect": v}))
+
+    if "cook_ramp" in body:
+        v = int(body["cook_ramp"])
+        settings["cook_ramp"] = v
+        mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_cook_ramp", "cook_ramp": v}))
+
+    if "propband" in body:
+        v = int(body["propband"])
+        settings["propband"] = v
+        mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_propband", "propband": v}))
+
+    if "cyctime" in body:
+        v = int(body["cyctime"])
+        settings["cyctime"] = v
+        mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_cyctime", "cyctime": v}))
+
+    if "timeout_action" in body:
+        v = body["timeout_action"]
+        settings["timeout_action"] = v
+        mqttc.publish(TOPIC_RECV, json.dumps({"name": "set_timeout_action", "timeout_action": v}))
+
+    return jsonify({"ok": True, "settings": settings})
 
 @app.route("/api/sync")
 def api_sync():
