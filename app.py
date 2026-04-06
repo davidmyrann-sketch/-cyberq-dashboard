@@ -23,11 +23,8 @@ DEVICE_ID   = "324579"
 MQTT_CID    = f"cyberq-{uuid.uuid4().hex[:8]}"
 POLL_SECS   = 12             # HTTP poll-intervall
 
-import base64, ssl as _ssl
+import base64
 _API_AUTH_HEADER = "Basic " + base64.b64encode(f"{MQTT_USER}:{MQTT_PASS}".encode()).decode()
-_SSL_CTX = _ssl.create_default_context()
-_SSL_CTX.check_hostname = False
-_SSL_CTX.verify_mode = _ssl.CERT_NONE
 
 TOPIC_RECV  = f"flameboss/{DEVICE_ID}/recv"
 
@@ -92,7 +89,7 @@ def api_get(path):
         f"{API_BASE}/{path}",
         headers={"Authorization": _API_AUTH_HEADER, "Accept": "application/json"}
     )
-    with urllib.request.urlopen(req, context=_SSL_CTX, timeout=10) as r:
+    with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
 
 # ── Konverteringshjelpere ──────────────────────────────────────────────────────
