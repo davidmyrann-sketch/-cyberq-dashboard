@@ -4,11 +4,11 @@ CyberQ Dashboard — HTTP polling mot myflameboss.com API
 Data leses via REST (fungerer overalt), kommandoer sendes via MQTT hvis tilkoblet.
 Device ID: 324579
 """
-import json, time, threading, ssl, os, uuid
+import json, time, threading, ssl, os, uuid, base64
 from flask import Flask, render_template, jsonify, request
 from collections import deque
 from datetime import datetime
-import requests
+import urllib.request
 import paho.mqtt.client as mqtt
 
 app = Flask(__name__)
@@ -23,7 +23,7 @@ DEVICE_ID   = "324579"
 MQTT_CID    = f"cyberq-{uuid.uuid4().hex[:8]}"
 POLL_SECS   = 12             # HTTP poll-intervall
 
-_API_AUTH = (MQTT_USER, MQTT_PASS)
+_API_AUTH_HEADER = "Basic " + base64.b64encode(f"{MQTT_USER}:{MQTT_PASS}".encode()).decode()
 _last_poll_error = ""
 
 TOPIC_RECV  = f"flameboss/{DEVICE_ID}/recv"
@@ -85,9 +85,12 @@ settings = {
 
 # ── HTTP hjelper ───────────────────────────────────────────────────────────────
 def api_get(path):
-    r = requests.get(f"{API_BASE}/{path}", auth=_API_AUTH, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    req = urllib.request.Request(
+        f"{API_BASE}/{path}",
+        headers={"Authorization": _API_AUTH_HEADER, "Accept": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read())
 
 # ── Konverteringshjelpere ──────────────────────────────────────────────────────
 def tdc_to_c(tdc):
