@@ -7,8 +7,8 @@ Device ID: 324579
 import json, time, threading, ssl, os, uuid
 from flask import Flask, render_template, jsonify, request
 from collections import deque
-from datetime import datetime, timezone
-import urllib.request
+from datetime import datetime
+import requests
 import paho.mqtt.client as mqtt
 
 app = Flask(__name__)
@@ -23,8 +23,8 @@ DEVICE_ID   = "324579"
 MQTT_CID    = f"cyberq-{uuid.uuid4().hex[:8]}"
 POLL_SECS   = 12             # HTTP poll-intervall
 
-import base64
-_API_AUTH_HEADER = "Basic " + base64.b64encode(f"{MQTT_USER}:{MQTT_PASS}".encode()).decode()
+_API_AUTH = (MQTT_USER, MQTT_PASS)
+_last_poll_error = ""
 
 TOPIC_RECV  = f"flameboss/{DEVICE_ID}/recv"
 
@@ -85,12 +85,9 @@ settings = {
 
 # ── HTTP hjelper ───────────────────────────────────────────────────────────────
 def api_get(path):
-    req = urllib.request.Request(
-        f"{API_BASE}/{path}",
-        headers={"Authorization": _API_AUTH_HEADER, "Accept": "application/json"}
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read())
+    r = requests.get(f"{API_BASE}/{path}", auth=_API_AUTH, timeout=10)
+    r.raise_for_status()
+    return r.json()
 
 # ── Konverteringshjelpere ──────────────────────────────────────────────────────
 def tdc_to_c(tdc):
@@ -288,7 +285,9 @@ def poll_thread():
                     state["raw_msgs"].appendleft({"ts": ts, "source": "http", "data": msg})
 
         except Exception as e:
-            print(f"HTTP poll feil: {e}")
+            global _last_poll_error
+            _last_poll_error = f"{type(e).__name__}: {e}"
+            print(f"HTTP poll feil: {_last_poll_error}")
             state["connected"] = False
 
         time.sleep(POLL_SECS)
@@ -466,7 +465,8 @@ def api_timer():
     if action == "set":
         h = int(body.get("hours", 0))
         m = int(body.get("minutes", 0))
-        duration = h * 3600 + m * 60
+        s = int(body.get("seconds", 0))
+        duration = h * 3600 + m * 60 + s
         # Stopp løpende timer og sett ny varighet
         t["duration_s"] = float(duration)
         t["spent_s"]    = 0.0
@@ -514,6 +514,18 @@ def api_sync():
 @app.route("/api/raw")
 def api_raw():
     return jsonify(list(state["raw_msgs"]))
+
+@app.route("/api/debug")
+def api_debug():
+    return jsonify({
+        "connected":       state["connected"],
+        "mqtt_connected":  state["mqtt_connected"],
+        "last_data_ago_s": round(time.time() - state["last_data"], 1),
+        "cook_id":         state["cook_id"],
+        "last_cnt":        state["last_cnt"],
+        "last_poll_error": _last_poll_error,
+        "ts":              state["ts"],
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8088))

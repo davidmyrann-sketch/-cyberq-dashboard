@@ -78,7 +78,7 @@
   .timer-section { margin-top: 12px; border-top: 1px solid #2a2a2a; padding-top: 10px; }
   .timer-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #555; margin-bottom: 6px; }
   .timer-set-row { display:flex; align-items:center; gap:4px; margin-bottom:6px; }
-  .timer-set-row input { background:#222; border:1px solid #333; border-radius:6px; color:#eee; font-size:13px; padding:4px 6px; width:52px; outline:none; text-align:center; }
+  .timer-set-row input { background:#222; border:1px solid #333; border-radius:6px; color:#eee; font-size:13px; padding:4px 4px; width:42px; outline:none; text-align:center; }
   .timer-set-row input:focus { border-color:#e8620a; }
   .timer-set-row span { color:#555; font-size:14px; }
   .timer-set-btn { background:#e8620a; border:none; border-radius:6px; color:white; cursor:pointer; font-size:11px; padding:5px 10px; white-space:nowrap; }
@@ -167,6 +167,8 @@
         <input type="number" id="food1-th" min="0" max="23" value="0" placeholder="tt">
         <span>:</span>
         <input type="number" id="food1-tm" min="0" max="59" value="0" placeholder="mm">
+        <span>:</span>
+        <input type="number" id="food1-ts" min="0" max="59" value="0" placeholder="ss">
         <button class="timer-set-btn" onclick="timerSet(1)">Sett</button>
       </div>
       <div class="timer-display-row">
@@ -201,6 +203,8 @@
         <input type="number" id="food2-th" min="0" max="23" value="0" placeholder="tt">
         <span>:</span>
         <input type="number" id="food2-tm" min="0" max="59" value="0" placeholder="mm">
+        <span>:</span>
+        <input type="number" id="food2-ts" min="0" max="59" value="0" placeholder="ss">
         <button class="timer-set-btn" onclick="timerSet(2)">Sett</button>
       </div>
       <div class="timer-display-row">
@@ -235,6 +239,8 @@
         <input type="number" id="food3-th" min="0" max="23" value="0" placeholder="tt">
         <span>:</span>
         <input type="number" id="food3-tm" min="0" max="59" value="0" placeholder="mm">
+        <span>:</span>
+        <input type="number" id="food3-ts" min="0" max="59" value="0" placeholder="ss">
         <button class="timer-set-btn" onclick="timerSet(3)">Sett</button>
       </div>
       <div class="timer-display-row">
@@ -730,9 +736,10 @@ function formatCountdown(secs) {
 async function timerSet(index) {
   const h = parseInt(document.getElementById(`food${index}-th`).value) || 0;
   const m = parseInt(document.getElementById(`food${index}-tm`).value) || 0;
-  if (h === 0 && m === 0) { toast('Sett timer til mer enn 0 minutter', 'err'); return; }
-  const d = await api('/api/timer', {index, action: 'set', hours: h, minutes: m});
-  if (d && d.ok) { toast(`⏱ Timer ${index} satt til ${h}t ${m}m`); fetchStatus(); }
+  const s = parseInt(document.getElementById(`food${index}-ts`).value) || 0;
+  if (h === 0 && m === 0 && s === 0) { toast('Sett timer til mer enn 0 sekunder', 'err'); return; }
+  const d = await api('/api/timer', {index, action: 'set', hours: h, minutes: m, seconds: s});
+  if (d && d.ok) { toast(`⏱ Timer ${index} satt til ${h}t ${m}m ${s}s`); fetchStatus(); }
 }
 
 async function timerAction(index, action) {
