@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CyberQ Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; color: #eee; font-family: 'Helvetica Neue', Arial, sans-serif; min-height: 100vh; }
+
+  header { background: #1a1a1a; border-bottom: 2px solid #e8620a; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+  header h1 { font-size: 18px; font-weight: 700; color: #e8620a; letter-spacing: 1px; }
+  header .sub { font-size: 12px; color: #888; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #444; margin-left: auto; }
+  .dot.online { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+  .dot.offline { background: #e74c3c; box-shadow: 0 0 8px #e74c3c; }
+  #conn-label { font-size: 11px; color: #888; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 20px 24px; }
+
+  .card { background: #1a1a1a; border-radius: 12px; padding: 18px 20px; border: 1px solid #2a2a2a; position: relative; }
+  .card.pit   { border-top: 3px solid #e8620a; }
+  .card.food1 { border-top: 3px solid #3498db; }
+  .card.food2 { border-top: 3px solid #2ecc71; }
+  .card.food3 { border-top: 3px solid #9b59b6; }
+  .probe-set-row { display:none; } /* food probes: no pit-set UI */
+  .card.fan-card { border-top: 3px solid #f39c12; }
+
+  .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 6px; }
+  .card-name { font-size: 14px; font-weight: 600; color: #ccc; margin-bottom: 10px; }
+  .card-name input { background: none; border: none; border-bottom: 1px dashed #444; color: #ccc; font-size: 14px; font-weight: 600; width: 100%; outline: none; }
+  .card-name input:focus { border-color: #e8620a; color: white; }
+
+  .temp-main { font-size: 48px; font-weight: 800; line-height: 1; }
+  .temp-unit { font-size: 18px; color: #888; margin-left: 4px; }
+  .temp-set { font-size: 13px; color: #888; margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+  .temp-set input { background: #222; border: 1px solid #333; border-radius: 6px; color: #eee; font-size: 13px; padding: 4px 8px; width: 70px; outline: none; }
+  .temp-set input:focus { border-color: #e8620a; }
+  .set-btn { background: #e8620a; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 12px; padding: 4px 10px; }
+  .set-btn:hover { background: #cf5508; }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #222; border: 1px solid #444; border-radius: 10px; padding: 10px 20px; font-size: 13px; color: #eee; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200; }
+  #toast.show { opacity: 1; }
+  #toast.ok   { border-color: #2ecc71; color: #2ecc71; }
+  #toast.err  { border-color: #e74c3c; color: #e74c3c; }
+
+  /* Blower slider */
+  .blower-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+  .blower-row input[type=range] { flex: 1; accent-color: #f39c12; }
+  .blower-row .set-btn { background: #f39c12; white-space: nowrap; }
+  .blower-row .set-btn:hover { background: #d48910; }
+
+  .status-badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px; margin-top: 10px; font-weight: 700; letter-spacing: 1px; }
+  .status-OK { background: #1a4a2a; color: #2ecc71; }
+  .status-HIGH { background: #4a1a1a; color: #e74c3c; }
+  .status-LOW { background: #1a2a4a; color: #3498db; }
+  .status-DONE { background: #2a2a1a; color: #f1c40f; }
+  .status-ALARM { background: #4a1a1a; color: #e74c3c; }
+  .status-ERROR { background: #3a1a1a; color: #e67e22; }
+
+  .fan-bar-wrap { margin-top: 10px; background: #222; border-radius: 20px; height: 10px; overflow: hidden; }
+  .fan-bar { height: 100%; background: linear-gradient(90deg, #f39c12, #e74c3c); border-radius: 20px; transition: width 1s ease; }
+  .fan-pct { font-size: 42px; font-weight: 800; margin-top: 4px; }
+
+  .chart-section { padding: 0 24px 24px; }
+  .chart-section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 12px; }
+  .chart-wrap { background: #1a1a1a; border-radius: 12px; padding: 16px; border: 1px solid #2a2a2a; }
+
+  .ts-bar { text-align: center; padding: 8px; font-size: 11px; color: #555; }
+  .fw-badge { font-size: 10px; color: #555; margin-left: 8px; }
+
+  @media (max-width: 600px) {
+    .grid { padding: 12px; gap: 12px; }
+    .chart-section { padding: 0 12px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🔥 CyberQ Dashboard</h1>
+    <div class="sub">BBQ Guru CyberQ Cloud — Lokal kontroll <span class="fw-badge" id="fw"></span></div>
+  </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+    <button onclick="syncDevice()" style="background:#2a2a2a;border:1px solid #444;border-radius:8px;color:#ccc;cursor:pointer;font-size:12px;padding:6px 14px;">🔄 Synkroniser</button>
+    <button onclick="openWifi()" style="background:#2a2a2a;border:1px solid #444;border-radius:8px;color:#ccc;cursor:pointer;font-size:12px;padding:6px 14px;">📶 WiFi-oppsett</button>
+    <button onclick="testConn()" style="background:#2a2a2a;border:1px solid #444;border-radius:8px;color:#ccc;cursor:pointer;font-size:12px;padding:6px 14px;">🔌 Status</button>
+    <span id="conn-label">Kobler til...</span>
+    <div class="dot" id="conn-dot"></div>
+  </div>
+</header>
+
+<div class="grid" id="cards">
+  <!-- Pit -->
+  <div class="card pit">
+    <div class="card-label">Grill / Pit</div>
+    <div class="card-name">Temperatur</div>
+    <div class="temp-main" id="pit-temp">--<span class="temp-unit">°C</span></div>
+    <div class="temp-set">
+      Mål: <input type="number" id="pit-set-input" min="0" max="300" step="1" placeholder="°C">
+      <button class="set-btn" onclick="setTemp('pit')">Sett</button>
+    </div>
+    <span class="status-badge status-OK" id="pit-status">--</span>
+  </div>
+
+  <!-- Food 1 -->
+  <div class="card food1">
+    <div class="card-label">Mat 1</div>
+    <div class="card-name"><input type="text" id="food1-name" maxlength="16" onchange="setName(1)" placeholder="Mat 1"></div>
+    <div class="temp-main" id="food1-temp">--<span class="temp-unit">°C</span></div>
+    <div class="temp-set">
+      Alarm: <input type="number" id="food1-alarm-input" min="0" max="100" step="1" placeholder="°C">
+      <button class="set-btn" onclick="setFoodTemp(1)">Sett</button>
+    </div>
+    <span class="status-badge status-OK" id="food1-status">--</span>
+  </div>
+
+  <!-- Food 2 -->
+  <div class="card food2">
+    <div class="card-label">Mat 2</div>
+    <div class="card-name"><input type="text" id="food2-name" maxlength="16" onchange="setName(2)" placeholder="Mat 2"></div>
+    <div class="temp-main" id="food2-temp">--<span class="temp-unit">°C</span></div>
+    <div class="temp-set">
+      Alarm: <input type="number" id="food2-alarm-input" min="0" max="100" step="1" placeholder="°C">
+      <button class="set-btn" onclick="setFoodTemp(2)">Sett</button>
+    </div>
+    <span class="status-badge status-OK" id="food2-status">--</span>
+  </div>
+
+  <!-- Food 3 -->
+  <div class="card food3">
+    <div class="card-label">Mat 3</div>
+    <div class="card-name"><input type="text" id="food3-name" maxlength="16" onchange="setName(3)" placeholder="Mat 3"></div>
+    <div class="temp-main" id="food3-temp">--<span class="temp-unit">°C</span></div>
+    <div class="temp-set">
+      Alarm: <input type="number" id="food3-alarm-input" min="0" max="100" step="1" placeholder="°C">
+      <button class="set-btn" onclick="setFoodTemp(3)">Sett</button>
+    </div>
+    <span class="status-badge status-OK" id="food3-status">--</span>
+  </div>
+
+  <!-- Fan -->
+  <div class="card fan-card">
+    <div class="card-label">Vifte</div>
+    <div class="card-name">Blåserstyrke</div>
+    <div class="fan-pct" id="fan-pct">--%</div>
+    <div class="fan-bar-wrap"><div class="fan-bar" id="fan-bar" style="width:0%"></div></div>
+    <div class="blower-row">
+      <input type="range" id="blower-slider" min="0" max="100" step="5" value="0"
+             oninput="document.getElementById('blower-val').textContent=this.value+'%'">
+      <span id="blower-val" style="font-size:13px;color:#f39c12;min-width:36px;">0%</span>
+      <button class="set-btn" onclick="setBlower()">Sett</button>
+      <button class="set-btn" onclick="setBlowerAuto()" style="background:#555;">Auto</button>
+    </div>
+    <div style="font-size:11px;color:#555;margin-top:6px;">0% = automatisk PID-styring</div>
+  </div>
+</div>
+
+<!-- Graf -->
+<div class="chart-section">
+  <h2>Temperaturhistorikk (siste 10 min)</h2>
+  <div class="chart-wrap">
+    <canvas id="tempChart" height="100"></canvas>
+  </div>
+</div>
+
+<div class="ts-bar" id="ts-bar">Venter på data...</div>
+<div id="toast"></div>
+
+<!-- WiFi Setup Modal -->
+<div id="wifi-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#1a1a1a;border:1px solid #333;border-radius:14px;padding:28px;width:min(460px,95vw);max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <h2 style="color:#e8620a;font-size:16px;">📶 WiFi-oppsett</h2>
+      <button onclick="closeWifi()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;">✕</button>
+    </div>
+
+    <!-- Info -->
+    <div style="background:#111;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;" id="wifi-current">
+      <div style="color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;font-size:10px;">Info</div>
+      <div id="wifi-current-content" style="color:#ccc;line-height:1.7;">
+        WiFi-oppsett gjøres via <b>enhetens eget grensesnitt</b>.<br>
+        Klikk lenken nedenfor mens du er på samme nettverk som CyberQ.
+      </div>
+    </div>
+
+    <!-- Direkte lenke til enhetens eget grensesnitt -->
+    <div style="font-size:11px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Direkte tilgang til enhet</div>
+    <a href="http://192.168.101.10" target="_blank" style="display:block;background:#111;border:1px solid #333;border-radius:8px;padding:10px 14px;color:#3498db;font-size:13px;text-decoration:none;margin-bottom:6px;">
+      🌐 Åpne enhetens eget grensesnitt →
+    </a>
+    <a href="http://192.168.101.10/scan.htm" target="_blank" style="display:block;background:#111;border:1px solid #333;border-radius:8px;padding:10px 14px;color:#3498db;font-size:13px;text-decoration:none;">
+      📶 WiFi-skanning på enhet →
+    </a>
+  </div>
+</div>
+
+<!-- Tilkoblingsdiagnose modal -->
+<div id="diag-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#1a1a1a;border:1px solid #333;border-radius:14px;padding:28px;width:min(420px,95vw);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <h2 style="color:#e8620a;font-size:16px;">🔌 Tilkoblingsdiagnose</h2>
+      <button onclick="document.getElementById('diag-modal').style.display='none'" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <div id="diag-content" style="font-size:13px;line-height:1.8;color:#ccc;"></div>
+  </div>
+</div>
+
+<script>
+const ctx = document.getElementById('tempChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Pit',   data: [], borderColor: '#e8620a', tension: 0.3, fill: false, pointRadius: 0 },
+      { label: 'Mat 1', data: [], borderColor: '#3498db', tension: 0.3, fill: false, pointRadius: 0 },
+      { label: 'Mat 2', data: [], borderColor: '#2ecc71', tension: 0.3, fill: false, pointRadius: 0 },
+      { label: 'Mat 3', data: [], borderColor: '#9b59b6', tension: 0.3, fill: false, pointRadius: 0 },
+    ]
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    scales: {
+      x: { ticks: { color: '#666', maxTicksLimit: 10 }, grid: { color: '#222' } },
+      y: { ticks: { color: '#666' }, grid: { color: '#222' }, title: { display: true, text: '°C', color: '#666' } }
+    },
+    plugins: { legend: { labels: { color: '#aaa' } } }
+  }
+});
+
+function tempHTML(c) {
+  if (c === null || c === undefined) return '--<span class="temp-unit">°C</span>';
+  return `${c}<span class="temp-unit">°C</span>`;
+}
+
+function tempStatus(c, setC) {
+  if (c === null || c === undefined) return 'ERROR';
+  if (setC && Math.abs(c - setC) <= 5) return 'OK';
+  if (setC && c > setC + 5) return 'HIGH';
+  if (setC && c < setC - 10) return 'LOW';
+  return 'OK';
+}
+
+function updateStatus(el, status) {
+  el.textContent = status;
+  el.className = 'status-badge status-' + (status || 'OK');
+}
+
+async function fetchStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+
+    if (!d.connected) {
+      setOffline('MQTT ikke tilkoblet — sjekk internett');
+      return;
+    }
+    if (!d.device_online) {
+      setOffline('Tilkoblet — venter på data fra enhet...');
+      // Still render whatever we have
+    } else {
+      setOnline();
+    }
+
+    const probes = d.probes || [];
+    const byIdx = {};
+    probes.forEach(p => byIdx[p.index] = p);
+
+    const pit   = byIdx[0] || {};
+    const food1 = byIdx[1] || {};
+    const food2 = byIdx[2] || {};
+    const food3 = byIdx[3] || {};
+
+    document.getElementById('pit-temp').innerHTML   = tempHTML(pit.c);
+    document.getElementById('food1-temp').innerHTML = tempHTML(food1.c);
+    document.getElementById('food2-temp').innerHTML = tempHTML(food2.c);
+    document.getElementById('food3-temp').innerHTML = tempHTML(food3.c);
+
+    // Pit set-temp placeholder
+    if (document.activeElement.id !== 'pit-set-input') {
+      document.getElementById('pit-set-input').placeholder =
+        d.set_temp_c !== null && d.set_temp_c !== undefined ? d.set_temp_c + ' °C' : '°C';
+    }
+
+    // Probe names
+    if (document.activeElement.id !== 'food1-name') document.getElementById('food1-name').value = food1.name || '';
+    if (document.activeElement.id !== 'food2-name') document.getElementById('food2-name').value = food2.name || '';
+    if (document.activeElement.id !== 'food3-name') document.getElementById('food3-name').value = food3.name || '';
+
+    const sc = d.set_temp_c;
+    updateStatus(document.getElementById('pit-status'),   pit.c   != null ? tempStatus(pit.c, sc)    : 'ERROR');
+    updateStatus(document.getElementById('food1-status'), food1.c != null ? 'OK'                      : '–––');
+    updateStatus(document.getElementById('food2-status'), food2.c != null ? 'OK'                      : '–––');
+    updateStatus(document.getElementById('food3-status'), food3.c != null ? 'OK'                      : '–––');
+
+    const fan = parseInt(d.blower) || 0;
+    document.getElementById('fan-pct').textContent = fan + '%';
+    document.getElementById('fan-bar').style.width = fan + '%';
+    document.getElementById('ts-bar').textContent = 'Sist oppdatert: ' + d.ts;
+  } catch(e) {
+    setOffline(e.message);
+  }
+}
+
+async function fetchHistory() {
+  try {
+    const r = await fetch('/api/history');
+    const h = await r.json();
+    chart.data.labels = h.map(p => p.ts);
+    chart.data.datasets[0].data = h.map(p => p.probe0);
+    chart.data.datasets[1].data = h.map(p => p.probe1);
+    chart.data.datasets[2].data = h.map(p => p.probe2);
+    chart.data.datasets[3].data = h.map(p => p.probe3);
+    chart.update();
+  } catch(e) {}
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 2500);
+}
+
+async function api(url, body) {
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    return d;
+  } catch(e) {
+    toast('Feil: ' + e.message, 'err');
+    return null;
+  }
+}
+
+async function setTemp(probe) {
+  const input = document.getElementById(probe + '-set-input');
+  const val = parseFloat(input.value);
+  if (isNaN(val)) { toast('Skriv inn en temperatur', 'err'); return; }
+  const d = await api('/api/set_temp', {temp_c: val});
+  if (d && d.ok) { toast(`✅ Pit-mål satt til ${val}°C`); input.value = ''; }
+}
+
+async function setFoodTemp(index) {
+  const input = document.getElementById('food' + index + '-alarm-input');
+  const val = parseFloat(input.value);
+  if (isNaN(val)) { toast('Skriv inn en temperatur', 'err'); return; }
+  const d = await api('/api/set_food_temp', {index, temp_c: val});
+  if (d && d.ok) { toast(`✅ Mat ${index} alarm satt til ${val}°C`); input.value = ''; }
+}
+
+async function setBlower() {
+  const pct = parseInt(document.getElementById('blower-slider').value);
+  const d = await api('/api/set_blower', {blower: pct});
+  if (d && d.ok) toast(pct === 0 ? '✅ Vifte: automatisk' : `✅ Vifte satt til ${pct}%`);
+}
+
+async function setBlowerAuto() {
+  document.getElementById('blower-slider').value = 0;
+  document.getElementById('blower-val').textContent = '0%';
+  const d = await api('/api/set_blower', {blower: 0});
+  if (d && d.ok) toast('✅ Vifte: automatisk PID');
+}
+
+async function setName(index) {
+  const nameMap = {1: 'food1', 2: 'food2', 3: 'food3'};
+  const label = document.getElementById(nameMap[index] + '-name').value;
+  const d = await api('/api/set_label', {index, label});
+  if (d && d.ok) toast(`✅ Navn oppdatert`);
+}
+
+function setOnline() {
+  document.getElementById('conn-dot').className    = 'dot online';
+  document.getElementById('conn-label').textContent = 'Tilkoblet';
+}
+function setOffline(msg) {
+  document.getElementById('conn-dot').className    = 'dot offline';
+  document.getElementById('conn-label').textContent = 'Ikke tilkoblet';
+  document.getElementById('ts-bar').textContent = msg;
+}
+
+// ── Diagnose — viser MQTT-status ──────────────────────────────────────────────
+async function testConn() {
+  document.getElementById('diag-modal').style.display = 'flex';
+  const el = document.getElementById('diag-content');
+  el.innerHTML = '⏳ Henter tilkoblingsstatus...';
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    let html = '';
+    if (d.connected) {
+      html += '<div style="color:#2ecc71;font-size:15px;margin-bottom:12px;">✅ MQTT tilkoblet!</div>';
+      html += `<b>Enhet:</b> ${d.probes ? d.probes.length : 0} prober aktive<br>`;
+      html += `<b>Sist oppdatert:</b> ${d.ts}<br>`;
+      html += `<b>Blåser:</b> ${d.blower}%<br>`;
+    } else {
+      html += '<div style="color:#e74c3c;font-size:15px;margin-bottom:12px;">❌ MQTT ikke tilkoblet</div>';
+      html += '<div style="background:#111;border-radius:8px;padding:12px;font-size:12px;">';
+      html += '<b style="color:#e8620a;">Sjekkliste:</b><br>';
+      html += '1. Er CyberQ-enheten koblet til internett?<br>';
+      html += '2. Sjekk at enheten er konfigurert mot myflameboss.com<br>';
+      html += '3. Se server-terminalen for MQTT-feilmeldinger<br>';
+      html += '4. Prøv <b>/api/sync</b> for å be enheten sende data på nytt';
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<span style="color:#e74c3c;">Feil: ' + e.message + '</span>';
+  }
+}
+
+// ── WiFi modal — lenker til enhetens eget grensesnitt ─────────────────────────
+function openWifi() {
+  document.getElementById('wifi-modal').style.display = 'flex';
+  document.getElementById('wifi-current-content').innerHTML =
+    'WiFi-oppsett gjøres via <b>enhetens eget grensesnitt</b>.<br>Klikk lenken nedenfor mens du er på samme nettverk som CyberQ.';
+}
+function closeWifi() {
+  document.getElementById('wifi-modal').style.display = 'none';
+}
+function wifiScan() {
+  window.open('http://192.168.101.10', '_blank');
+}
+
+// ── Synkroniser (be enheten sende data) ───────────────────────────────────────
+async function syncDevice() {
+  await fetch('/api/sync');
+}
+
+// Poll hvert 5. sekund
+fetchStatus();
+fetchHistory();
+setInterval(fetchStatus, 5000);
+setInterval(fetchHistory, 10000);
+</script>
+</body>
+</html>
