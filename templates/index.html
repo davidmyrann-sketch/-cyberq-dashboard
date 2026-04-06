@@ -40,6 +40,12 @@
   .set-btn { background: #e8620a; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 12px; padding: 4px 10px; }
   .set-btn:hover { background: #cf5508; }
 
+  /* Bannere */
+  .banner { border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 600; display:flex; align-items:center; gap:10px; }
+  .banner-done  { background:#0d2b1a; border:1px solid #2ecc71; color:#2ecc71; }
+  .banner-ramp  { background:#2a200a; border:1px solid #f39c12; color:#f39c12; }
+  .banner-lid   { background:#2a1a0a; border:1px solid #e67e22; color:#e67e22; }
+
   /* Target display */
   .target-display { display:flex; align-items:baseline; gap:5px; margin: 6px 0 4px; }
   .target-label { font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:#666; }
@@ -189,6 +195,9 @@
   </div>
 </div>
 
+<!-- Status-bannere -->
+<div id="banners" style="padding: 0 24px 4px; display:flex; flex-direction:column; gap:8px;"></div>
+
 <!-- Graf -->
 <div class="chart-section">
   <h2>Temperaturhistorikk (siste 10 min)</h2>
@@ -246,10 +255,16 @@ const chart = new Chart(ctx, {
   data: {
     labels: [],
     datasets: [
-      { label: 'Pit',   data: [], borderColor: '#e8620a', tension: 0.3, fill: false, pointRadius: 0 },
-      { label: 'Mat 1', data: [], borderColor: '#3498db', tension: 0.3, fill: false, pointRadius: 0 },
-      { label: 'Mat 2', data: [], borderColor: '#2ecc71', tension: 0.3, fill: false, pointRadius: 0 },
-      { label: 'Mat 3', data: [], borderColor: '#9b59b6', tension: 0.3, fill: false, pointRadius: 0 },
+      // Faktiske temperaturer (indeks 0-3)
+      { label: 'Pit',   data: [], borderColor: '#e8620a', tension: 0.3, fill: false, pointRadius: 0, borderWidth: 2 },
+      { label: 'Mat 1', data: [], borderColor: '#3498db', tension: 0.3, fill: false, pointRadius: 0, borderWidth: 2 },
+      { label: 'Mat 2', data: [], borderColor: '#2ecc71', tension: 0.3, fill: false, pointRadius: 0, borderWidth: 2 },
+      { label: 'Mat 3', data: [], borderColor: '#9b59b6', tension: 0.3, fill: false, pointRadius: 0, borderWidth: 2 },
+      // Mållinjer (stiplede, indeks 4-7)
+      { label: 'Pit mål',   data: [], borderColor: '#e8620a', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
+      { label: 'Mat 1 mål', data: [], borderColor: '#3498db', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
+      { label: 'Mat 2 mål', data: [], borderColor: '#2ecc71', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
+      { label: 'Mat 3 mål', data: [], borderColor: '#9b59b6', borderDash:[6,4], tension:0, fill:false, pointRadius:0, borderWidth:1.5 },
     ]
   },
   options: {
@@ -259,9 +274,13 @@ const chart = new Chart(ctx, {
       x: { ticks: { color: '#666', maxTicksLimit: 10 }, grid: { color: '#222' } },
       y: { ticks: { color: '#666' }, grid: { color: '#222' }, title: { display: true, text: '°C', color: '#666' } }
     },
-    plugins: { legend: { labels: { color: '#aaa' } } }
+    plugins: { legend: { labels: { color: '#aaa', filter: i => !i.text.includes('mål') || chart.data.datasets[i.datasetIndex].data.some(v => v != null) } } }
   }
 });
+
+// Globale målverdier for graflinjer
+let pitTargetC    = null;
+const foodTargets = {1: null, 2: null, 3: null};
 
 function tempHTML(c) {
   if (c === null || c === undefined) return '--<span class="temp-unit">°C</span>';
@@ -312,10 +331,16 @@ async function fetchStatus() {
     document.getElementById('food3-temp').innerHTML = tempHTML(food3.c);
 
     // Pit måltemperatur
-    const pitTarget = d.set_temp_c;
-    if (pitTarget != null) {
-      document.getElementById('pit-target-val').textContent = pitTarget;
+    const userPitTarget = d.user_set_temp_c || d.set_temp_c;
+    if (userPitTarget != null) {
+      document.getElementById('pit-target-val').textContent = userPitTarget;
       document.getElementById('pit-target-display').style.display = 'flex';
+      pitTargetC = userPitTarget;
+    }
+    // Vis ramp-nedskrudd mål hvis aktiv
+    if (d.ctrl && d.ctrl.ramping && d.ctrl.ramp_active_set_c != null) {
+      document.getElementById('pit-target-val').textContent =
+        `${d.ctrl.ramp_active_set_c} (↓${userPitTarget})`;
     }
 
     // Mat-alarm temperaturer
@@ -326,8 +351,20 @@ async function fetchStatus() {
       if (val != null) {
         document.getElementById('food' + i + '-target-val').textContent = val;
         disp.style.display = 'flex';
+        foodTargets[i] = val;
       }
     });
+
+    // ── Bannere ───────────────────────────────────────────────────────────────
+    const c = d.ctrl || {};
+    const banners = [];
+    if (c.open_lid)
+      banners.push(`<div class="banner banner-lid">🔓 Lokk åpnet — vifte pauset i 45s</div>`);
+    if (c.food_override)
+      banners.push(`<div class="banner banner-done">✅ Mat ${c.food_override_probe} ferdig — vifte stoppet!</div>`);
+    if (c.ramping && !c.food_override)
+      banners.push(`<div class="banner banner-ramp">📉 Ramp aktiv — pit-mål senkes (${Math.round(c.ramp_factor*100)}%)</div>`);
+    document.getElementById('banners').innerHTML = banners.join('');
 
     // Probe names
     if (document.activeElement.id !== 'food1-name') document.getElementById('food1-name').value = food1.name || '';
@@ -353,11 +390,18 @@ async function fetchHistory() {
   try {
     const r = await fetch('/api/history');
     const h = await r.json();
+    const n = h.length;
     chart.data.labels = h.map(p => p.ts);
+    // Faktiske temps
     chart.data.datasets[0].data = h.map(p => p.probe0);
     chart.data.datasets[1].data = h.map(p => p.probe1);
     chart.data.datasets[2].data = h.map(p => p.probe2);
     chart.data.datasets[3].data = h.map(p => p.probe3);
+    // Mållinjer (flat linje på gjeldende target)
+    chart.data.datasets[4].data = pitTargetC    != null ? Array(n).fill(pitTargetC)    : [];
+    chart.data.datasets[5].data = foodTargets[1]!= null ? Array(n).fill(foodTargets[1]) : [];
+    chart.data.datasets[6].data = foodTargets[2]!= null ? Array(n).fill(foodTargets[2]) : [];
+    chart.data.datasets[7].data = foodTargets[3]!= null ? Array(n).fill(foodTargets[3]) : [];
     chart.update();
   } catch(e) {}
 }
