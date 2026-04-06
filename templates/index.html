@@ -407,14 +407,14 @@ async function fetchStatus() {
     const d = await r.json();
 
     if (!d.connected) {
-      setOffline('MQTT ikke tilkoblet — sjekk internett');
+      setOffline('Enheten offline — sjekker igjen om 12s');
       return;
     }
     if (!d.device_online) {
       document.getElementById('conn-dot').className    = 'dot online';
       document.getElementById('conn-label').textContent = 'Tilkoblet (venter på data...)';
     } else {
-      setOnline();
+      setOnline(d.mqtt_connected);
     }
 
     const probes = d.probes || [];
@@ -569,9 +569,9 @@ async function setName(index) {
   if (d && d.ok) toast(`✅ Navn oppdatert`);
 }
 
-function setOnline() {
+function setOnline(mqtt) {
   document.getElementById('conn-dot').className    = 'dot online';
-  document.getElementById('conn-label').textContent = 'Tilkoblet';
+  document.getElementById('conn-label').textContent = mqtt ? 'Tilkoblet (MQTT)' : 'Tilkoblet (HTTP)';
 }
 function setOffline(msg) {
   document.getElementById('conn-dot').className    = 'dot offline';
